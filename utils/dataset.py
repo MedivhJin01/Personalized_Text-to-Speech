@@ -79,7 +79,7 @@ class VCTKDataset(Dataset):
         text_pad = pad_1D(texts, pad_value=0)
 
         # ------ 让 mel 长度对齐 n_frames_per_step ------
-        max_mel = max(mel_len)
+        max_mel = int(mel_len.max().item())
         r = N_FRAMES_PER_STEP
         if max_mel % r != 0: max_mel += r - max_mel % r
         mel_pad  = pad_2D(mels, pad_value=0.0)      # 先 pad 到统一最长
