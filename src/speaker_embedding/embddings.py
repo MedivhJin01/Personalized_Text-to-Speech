@@ -7,7 +7,7 @@ from resemblyzer import VoiceEncoder, preprocess_wav
 import soundfile as sf
 
 # Path configs
-VCTK_ROOT = Path("dataset/VCTK-Corpus-0")
+VCTK_ROOT = Path("dataset/VCTK")
 WAV_DIR = VCTK_ROOT / "wav48_silence_trimmed"
 SPEAKER_INFO = VCTK_ROOT / "speaker-info.txt"
 EMBEDDING_OUT = Path("speaker_embeddings.npy")

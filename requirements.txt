@@ -3,3 +3,7 @@ tqdm
 numpy
 soundfile
 resemblyzer
+unidecode
+inflect
+librosa
+torch

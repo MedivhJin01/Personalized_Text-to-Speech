@@ -6,6 +6,7 @@ import librosa
 import numpy as np
 import torch
 from torch.utils.data import Dataset
+from utils.text import text_to_sequence
 
 # --- Audio Config ---
 SR = 22050
@@ -16,12 +17,13 @@ MIN_LEVEL = 1e-5
 
 
 # --- Text Mapping ---
-_SYMBOLS = ["<pad>", "<unk>"] + list("abcdefghijklmnopqrstuvwxyz!'?,.- ")
-CHAR2IDX = {c: i for i, c in enumerate(_SYMBOLS)}
+# _SYMBOLS = ["<pad>", "<unk>"] + list("abcdefghijklmnopqrstuvwxyz!'?,.- ")
+# CHAR2IDX = {c: i for i, c in enumerate(_SYMBOLS)}
+CLEANERS_NAMES = ['english_cleaners']
 
-def text_to_sequence(text: str) -> List[int]:
-    text = text.lower()
-    return [CHAR2IDX.get(ch, CHAR2IDX["<unk>"]) for ch in text]
+# def text_to_sequence(text: str) -> List[int]:
+#     text = text.lower()
+#     return [CHAR2IDX.get(ch, CHAR2IDX["<unk>"]) for ch in text]
 
 def wav_to_mel(wav: np.ndarray, sr: int = SR) -> torch.Tensor:
     mel = librosa.feature.melspectrogram(
@@ -66,7 +68,7 @@ class VCTK_Dataset(Dataset):
     def __getitem__(self, idx):
         wav_path, txt_path, spk_id = self.items[idx]
         text = Path(txt_path).read_text().strip()
-        text_ids = torch.LongTensor(text_to_sequence(text))
+        text_ids = torch.LongTensor(text_to_sequence(text, CLEANERS_NAMES))
 
         # Load and resample
         wav, sr = librosa.load(str(wav_path), sr=None)
