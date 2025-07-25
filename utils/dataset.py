@@ -18,16 +18,34 @@ def wav_to_mel(wav, sr=SR):
     return torch.from_numpy(mel).float()    # [80, T]
 
 class VCTKDataset(Dataset):
-    def __init__(self, root, limit_speakers=None, cache_mel=True):
+    def __init__(self, root, selecting_speaker = True, cache_mel=True):
         self.root = Path(root)
         self.cache_mel = cache_mel
         wav_root = self.root / "wav48_silence_trimmed"
         txt_root = self.root / "txt"
+        if selecting_speaker:
+            with open(self.root / "selected_speakers.txt") as f:
+                speakers = [line.strip() for line in f if line.strip()]
+                print(f"Selected speakers: {speakers}")
+        else:
+            # Get all available speakers from the wav directory
+            speakers = [d for d in os.listdir(wav_root) if (wav_root / d).is_dir()]
+            speakers.sort()
 
-        speakers = sorted([d for d in os.listdir(wav_root) if (wav_root/d).is_dir()])
-        if limit_speakers:
-            speakers = speakers[:limit_speakers]
+        self.selected_speakers = speakers
+
         self.spk2id = {s: i for i, s in enumerate(speakers)}
+        self.id2spk = {i: s for i, s in enumerate(speakers)}
+        speaker_details = self._load_speaker_info()
+        self.id2info = {}
+        for i, s in enumerate(speakers):
+            if s in speaker_details:
+                info = speaker_details[s]
+                self.id2info[i] = f"{s}: {info['gender']}, {info['age']}yo, {info['accent']} ({info['region']})"
+            else:
+                self.id2info[i] = f"Speaker {s}"
+        print(f"speaker info: {self.id2info}")
+
 
         self.items = []
         for spk in speakers:
@@ -95,4 +113,29 @@ class VCTKDataset(Dataset):
         speaker_ids = torch.cat(spk_ids, dim=0)
 
         return text_pad, text_len, mel_pad, mel_len, gate_pad, speaker_ids
+    
+    def _load_speaker_info(self):
+        """Load detailed speaker information from speaker-info.txt"""
+        speaker_info = {}
+        info_path = self.root / "speaker-info.txt"
+
+        if info_path.exists():
+            with open(info_path, 'r') as f:
+                lines = f.readlines()[1:]  # Skip header
+                for line in lines:
+                    parts = line.strip().split()
+                    if len(parts) >= 4:
+                        spk_id = parts[0]
+                        age = parts[1]
+                        gender = parts[2]
+                        accent = parts[3]
+                        region = ' '.join(parts[4:]) if len(parts) > 4 else ''
+                        
+                        speaker_info[spk_id] = {
+                            'age': age,
+                            'gender': gender,
+                            'accent': accent,
+                            'region': region
+                        }
+        return speaker_info
 
