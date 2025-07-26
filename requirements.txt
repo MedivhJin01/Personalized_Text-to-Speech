@@ -7,3 +7,6 @@ unidecode
 inflect
 librosa
 torch
+unidecode
+scipy
+matplotlib
