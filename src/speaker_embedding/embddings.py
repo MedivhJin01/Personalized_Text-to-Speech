@@ -10,7 +10,7 @@ import soundfile as sf
 VCTK_ROOT = Path("dataset/VCTK")
 WAV_DIR = VCTK_ROOT / "wav48_silence_trimmed"
 SPEAKER_INFO = VCTK_ROOT / "speaker-info.txt"
-EMBEDDING_OUT = Path("speaker_embeddings.npy")
+EMBEDDING_OUT = Path("src/speaker_embedding/speaker_emb_lookup.npy")
 
 # Parameters
 NUM_SPEAKERS = 10  # can be 8-12
