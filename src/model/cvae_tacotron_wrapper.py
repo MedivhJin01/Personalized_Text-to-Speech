@@ -1,18 +1,3 @@
-"""C V A E Tacotron2 Wrapper (updated)
-
-Adds a Conditional‑VAE branch to a pretrained NVIDIA Tacotron2.  
-**Text input must already be tokenised** to int IDs (LongTensor) using the same
-Grapheme/phoneme cleaner that the pre‑trained model expects – typically
-`text_to_sequence(<raw str>, ['english_cleaners'])` from tacotron2 utils.
-
-Key fixes vs previous draft
----------------------------
-* **Correct encoder call** – first run `self.tts.embedding(text)` to turn
-  `LongTensor` into float embeddings *before* the convolution stack.
-* Clarified docstrings and comments so it’s obvious that `text` must be
-  token IDs, not raw strings.
-* Minor renames for clarity.
-"""
 
 from pathlib import Path
 from typing import Tuple
@@ -72,7 +57,7 @@ class CVAETacotron2(nn.Module):
         for p in tacotron2.parameters():
             p.requires_grad = False
         self.tts = tacotron2
-
+        self.spk_emb_lookup = 
         self.ref_enc   = ReferenceEncoder(z_dim)
         self.spk_proj  = nn.Linear(spk_dim_raw, spk_dim_proj)
         self.cond_proj = nn.Linear(z_dim + spk_dim_proj, 512)  # match encoder dim
@@ -105,11 +90,14 @@ class CVAETacotron2(nn.Module):
         enc_out  = self.tts.encoder(embedded, text_lens)          # [B,L,512]
         enc_out  = enc_out + cond.unsqueeze(1)                   # broadcast add
 
-        # decoder (teacher forcing)
-        mel_out, mel_post, gate_out, _ = self.tts.decoder(
-            enc_out, text_lens, mel_gt)
+        # decoder teacher-forcing
+        mel_out, gate_out, align = self.tts.decoder(enc_out, mel_gt, text_lens)
+
+        # post-net refinement
+        mel_post = mel_out + self.tts.postnet(mel_out)
 
         return mel_post, mel_out, gate_out, mu, logvar
+
 
 # -----------------------------------------------------------------------------
 # Loss helper
@@ -124,18 +112,35 @@ def cvae_taco_loss(mel_post, mel_gt, gate_out, gate_tgt, mu, logvar, *, beta=1e-
 # -----------------------------------------------------------------------------
 # sanity check
 # -----------------------------------------------------------------------------
-
 if __name__ == "__main__":
     B, L, T = 4, 50, 400
-    dev = 'cuda' if torch.cuda.is_available() else 'cpu'
-    model = CVAETacotron2('tacotron2_pretrained.pt').to(dev)
+    dev = "cuda" if torch.cuda.is_available() else "cpu"
 
-    txt   = torch.randint(1, 150, (B, L)).long().to(dev)
-    tlens = torch.randint(L//2, L, (B,)).long().to(dev)
-    mel   = torch.randn(B, 80, T).to(dev)
-    spk   = torch.randn(B, 256).to(dev)
-    gate  = torch.zeros(B, T//model.tts.decoder.n_frames_per_step).to(dev)
+    model = CVAETacotron2("tacotron2_pretrained.pt").to(dev).eval()
 
-    mel_post, mel_out, gate_out, mu, logvar = model(txt, tlens, mel, spk)
-    loss, logs = cvae_taco_loss(mel_post, mel, gate_out, gate, mu, logvar)
-    print('sanity OK', loss.item(), logs)
+    # ---------- text ----------
+    n_sym = 140
+    txt   = torch.randint(1, n_sym, (B, L), device=dev)
+    tlens = torch.randint(L//2, L+1, (B,), device=dev)
+    for i in range(B):
+        txt[i, tlens[i]:] = 0           # padding
+
+    tlens, sort_idx = tlens.sort(descending=True)
+    txt  = txt[sort_idx]
+
+    # ---------- mel / gate ----------
+    r   = model.tts.decoder.n_frames_per_step
+    T   = T - (T % r)
+    mel = torch.randn(B, 80, T, device=dev)[sort_idx]
+    gate= torch.zeros(B, T//r, device=dev)[sort_idx]
+
+    # ---------- speaker embedding ----------
+    spk = torch.randn(B, 256, device=dev)[sort_idx]
+
+    # ---------- forward & loss ----------
+    with torch.no_grad():
+        mel_post, mel_out, gate_out, mu, logvar = model(txt, tlens, mel, spk)
+        loss, logs = cvae_taco_loss(mel_post, mel, gate_out, gate, mu, logvar)
+
+    print("✅  sanity OK")
+    print("loss =", loss.item(), logs)
