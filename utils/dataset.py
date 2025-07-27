@@ -97,12 +97,12 @@ class VCTKDataset(Dataset):
 
         text_pad = pad_1D(texts, pad_value=0)
 
-        # ------ 让 mel 长度对齐 n_frames_per_step ------
+        # ------ shape of mel match n_frames_per_step ------
         max_mel = int(mel_len.max().item())
         r = N_FRAMES_PER_STEP
         if max_mel % r != 0: max_mel += r - max_mel % r
-        mel_pad  = pad_2D(mels, pad_value=0.0)      # 先 pad 到统一最长
-        if mel_pad.shape[2] < max_mel:              # 二次 pad 到步长倍数
+        mel_pad  = pad_2D(mels, pad_value=0.0)      # pad to max_mel
+        if mel_pad.shape[2] < max_mel:              # pad extra frames due to n_frames_per_step
             pad_extra = max_mel - mel_pad.shape[2]
             mel_pad = torch.nn.functional.pad(mel_pad, (0, pad_extra), value=0.0)
 
