@@ -47,7 +47,7 @@ class CVAETacotron2(nn.Module):
     """Freeze pretrained Tacotron2; learn ReferenceEncoder + speaker projection."""
 
     def __init__(self, ckpt_path: str, *, z_dim: int = 64,
-                 spk_dim_raw: int = 256, spk_dim_proj: int = 128):
+                 spk_dim_raw: int = 256, spk_dim_proj: int = 128, spk_emb_lookup_path: str = "src/speaker_embedding/speaker_emb_lookup.npy"):
         super().__init__()
         tacotron2 = torch.hub.load(
             'NVIDIA/DeepLearningExamples:torchhub', 'nvidia_tacotron2',
@@ -57,7 +57,12 @@ class CVAETacotron2(nn.Module):
         for p in tacotron2.parameters():
             p.requires_grad = False
         self.tts = tacotron2
-        self.spk_emb_lookup = 
+
+        # speaker embedding lookup table
+        speaker_emb_dict = np.load(spk_emb_lookup_path, allow_pickle=True).item()
+        speaker_look_up = torch.tensor([i for i in speaker_emb_dict.values()])
+        self.spk_emb = speaker_look_up
+
         self.ref_enc   = ReferenceEncoder(z_dim)
         self.spk_proj  = nn.Linear(spk_dim_raw, spk_dim_proj)
         self.cond_proj = nn.Linear(z_dim + spk_dim_proj, 512)  # match encoder dim
