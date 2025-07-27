@@ -73,38 +73,40 @@ class CVAETacotron2(nn.Module):
         return mu + std * torch.randn_like(std)
 
     def forward(self, text_ids, text_lens, mel_gt, speaker_embed):
-        """
-        Parameters
-        ----------
-        text_ids : LongTensor [B, L]
-            **Already tokenised** indices.
-        text_lens : LongTensor [B]
-        mel_gt : FloatTensor [B, 80, T]
-        speaker_embed : FloatTensor [B, 256]
-            Resemblyzer d‑vector (frozen).
-        """
-        # latent z
+        # ---------- sort for pack_padded_sequence ----------
+        text_lens, sort_idx = text_lens.sort(descending=True)
+        text_ids      = text_ids[sort_idx]
+        mel_gt        = mel_gt[sort_idx]
+        speaker_embed = speaker_embed[sort_idx]
+
+        # ---------- VAE + speaker condition ----------
         mu, logvar = self.ref_enc(mel_gt)
-        z = self.reparameterize(mu, logvar)            # [B, z_dim]
-        # speaker condition
-        e_spk = self.spk_proj(speaker_embed)            # [B,128]
-        cond  = self.cond_proj(torch.cat([e_spk, z], -1))
+        z      = self.reparameterize(mu, logvar)
+        e_spk  = self.spk_proj(speaker_embed)          # [B,128]
+        cond   = self.cond_proj(torch.cat([e_spk, z], -1))  # [B,512]
 
-        # encoder: embed → conv → bLSTM (pretrained & frozen)
-        embedded = self.tts.embedding(text_ids).transpose(1, 2)  # [B,txt_emb_size,L]
-        enc_out  = self.tts.encoder(embedded, text_lens)          # [B,L,txt_emb_size]
-        enc_out  = enc_out + cond.unsqueeze(1)                   # broadcast add
+        # ---------- Embed text ----------
+        embedded = self.tts.embedding(text_ids)        # [B, T, 512]  (Float)
+        embedded = embedded.transpose(1, 2)            # [B, 512, T]
 
-        # decoder teacher-forcing
+        # ---------- Encoder (★ 传入 input_lengths，且不要 transpose) ----------
+        enc_out = self.tts.encoder(embedded, text_lens)    # [B, T, 512]
+
+        # ---------- 加条件 ----------
+        enc_out = enc_out + cond.unsqueeze(1)          # broadcast add
+
+        # ---------- Decoder (teacher forcing) ----------
+        # 顺序: decoder(memory, decoder_inputs, memory_lengths)
         mel_out, gate_out, align = self.tts.decoder(
-            enc_out, text_lens, mel_gt
-        )
-        # post-net refinement
+            enc_out, mel_gt, text_lens)
+
         mel_post = mel_out + self.tts.postnet(mel_out)
 
-  
+        # ---------- 恢复原顺序 ----------
+        inv_idx  = sort_idx.argsort()
+        return (mel_post[inv_idx], mel_out[inv_idx],
+                gate_out[inv_idx], mu[inv_idx], logvar[inv_idx])
 
-        return mel_post, mel_out, gate_out, mu, logvar
 
 
 # -----------------------------------------------------------------------------
@@ -117,41 +119,3 @@ def cvae_taco_loss(mel_post, mel_gt, gate_out, gate_tgt, mu, logvar, *, beta=1e-
     kl  = -0.5 * torch.mean(1 + logvar - mu.pow(2) - logvar.exp())
     return l1 + gate + beta * kl, {'l1': l1.item(), 'gate': gate.item(), 'kl': kl.item()}
 
-# -----------------------------------------------------------------------------
-# sanity check
-# -----------------------------------------------------------------------------
-if __name__ == "__main__":
-    B, L, T = 4, 50, 400
-    dev = "cuda" if torch.cuda.is_available() else "cpu"
-    print(f"Using device: {dev}")
-    model = CVAETacotron2("src/model/tacotron2_pretrained.pt").to(dev).eval()
-
-    # ---------- text ----------
-    n_sym = 140
-    txt   = torch.randint(1, n_sym, (B, L), device=dev)
-    tlens = torch.randint(L//2, L+1, (B,), device=dev)
-    for i in range(B):
-        txt[i, tlens[i]:] = 0           # padding
-
-    tlens, sort_idx = tlens.sort(descending=True)
-    txt  = txt[sort_idx]
-
-    # ---------- mel / gate ----------
-    r   = model.tts.decoder.n_frames_per_step
-    print(f"n_frames_per_step = {r}")
-    T   = T - (T % r)
-    mel = torch.randn(B, 80, T, device=dev)[sort_idx]
-    gate= torch.zeros(B, T//r, device=dev)[sort_idx]
-
-    # ---------- speaker embedding ----------
-    spk = torch.randn(B, 256, device=dev)[sort_idx]
-
-    # ---------- forward & loss ----------
-    with torch.no_grad():
-        mel_post, mel_out, gate_out, mu, logvar = model(txt, tlens, mel, spk)
-        loss, logs = cvae_taco_loss(mel_post, mel, gate_out, gate, mu, logvar)
-
-    print("✅  sanity OK")
-    print("loss =", loss.item(), logs)
-
-# -----------------------------------------------------------------------------
