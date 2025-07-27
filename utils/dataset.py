@@ -7,7 +7,7 @@ from utils.tools import pad_1D, pad_2D
 SR = 22050
 N_MELS, N_FFT, HOP = 80, 1024, 256
 MIN_LEVEL = 1e-5
-N_FRAMES_PER_STEP = 2          # Tacotron2 default is 2
+N_FRAMES_PER_STEP = 1         
 
 def wav_to_mel(wav, sr=SR):
     mel = librosa.feature.melspectrogram(
