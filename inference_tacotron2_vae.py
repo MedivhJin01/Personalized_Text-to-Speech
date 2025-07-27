@@ -116,7 +116,7 @@ def synthesize_speech(
     if speaker_embedding is None and latent_z is None:
         print("No speaker embedding or latent provided, using random embedding...")
         speaker_embedding = torch.randn(1, 256).to(device)
-
+    import torch
     with torch.no_grad():
         try:
             # Synthesize mel spectrogram
