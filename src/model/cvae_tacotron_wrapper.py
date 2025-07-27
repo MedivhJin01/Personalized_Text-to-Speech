@@ -52,7 +52,7 @@ class CVAETacotron2(nn.Module):
         tacotron2 = torch.hub.load(
             'NVIDIA/DeepLearningExamples:torchhub', 'nvidia_tacotron2',
             pretrained=False)
-        tacotron2.load_state_dict(torch.load(ckpt_path, map_location='cpu'))
+        tacotron2.load_state_dict(torch.load(ckpt_path))
         tacotron2 = tacotron2.eval()
         for p in tacotron2.parameters():
             p.requires_grad = False
@@ -60,8 +60,8 @@ class CVAETacotron2(nn.Module):
 
         # speaker embedding lookup table
         speaker_emb_dict = np.load(spk_emb_lookup_path, allow_pickle=True).item()
-        speaker_look_up = torch.tensor([i for i in speaker_emb_dict.values()])
-        self.spk_emb = speaker_look_up
+        speaker_look_up = torch.from_numpy(np.stack(list(speaker_emb_dict.values())))
+        self.register_buffer("spk_emb", speaker_look_up)  # [N_spk, 256]
 
         self.ref_enc   = ReferenceEncoder(z_dim)
         self.spk_proj  = nn.Linear(spk_dim_raw, spk_dim_proj)
@@ -96,10 +96,13 @@ class CVAETacotron2(nn.Module):
         enc_out  = enc_out + cond.unsqueeze(1)                   # broadcast add
 
         # decoder teacher-forcing
-        mel_out, gate_out, align = self.tts.decoder(enc_out, mel_gt, text_lens)
-
+        mel_out, gate_out, align = self.tts.decoder(
+            enc_out, text_lens, mel_gt
+        )
         # post-net refinement
         mel_post = mel_out + self.tts.postnet(mel_out)
+
+  
 
         return mel_post, mel_out, gate_out, mu, logvar
 
@@ -120,8 +123,8 @@ def cvae_taco_loss(mel_post, mel_gt, gate_out, gate_tgt, mu, logvar, *, beta=1e-
 if __name__ == "__main__":
     B, L, T = 4, 50, 400
     dev = "cuda" if torch.cuda.is_available() else "cpu"
-
-    model = CVAETacotron2("tacotron2_pretrained.pt").to(dev).eval()
+    print(f"Using device: {dev}")
+    model = CVAETacotron2("src/model/tacotron2_pretrained.pt").to(dev).eval()
 
     # ---------- text ----------
     n_sym = 140
@@ -135,6 +138,7 @@ if __name__ == "__main__":
 
     # ---------- mel / gate ----------
     r   = model.tts.decoder.n_frames_per_step
+    print(f"n_frames_per_step = {r}")
     T   = T - (T % r)
     mel = torch.randn(B, 80, T, device=dev)[sort_idx]
     gate= torch.zeros(B, T//r, device=dev)[sort_idx]
@@ -149,3 +153,5 @@ if __name__ == "__main__":
 
     print("✅  sanity OK")
     print("loss =", loss.item(), logs)
+
+# -----------------------------------------------------------------------------
