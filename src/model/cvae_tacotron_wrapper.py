@@ -5,8 +5,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
+from utils.text import text_to_sequence, _symbol_to_id
 
 N_MELS = 80
+SPK_ID2I_lookup = np.load("src/speaker_embedding/speaker_emb_lookup.npy", allow_pickle=True).item()
 
 # -----------------------------------------------------------------------------
 # Reference Encoder ------------------------------------------------------------
@@ -107,6 +109,79 @@ class CVAETacotron2(nn.Module):
         return (mel_post[inv_idx], mel_out[inv_idx],
                 gate_out[inv_idx], mu[inv_idx], logvar[inv_idx])
 
+
+    @torch.inference_mode()
+    def infer(
+        self,
+        text: str,
+        spk_id: int | None = None,
+        spk_dvec: torch.Tensor | None = None,
+        z: torch.Tensor | None = None,
+        use_ref_mel: torch.Tensor | None = None,
+        sigma: float = 1.0,
+        device: torch.device | str = "cuda",
+    ):
+        """
+        Parameters
+        ----------
+        text : str
+            The input text to synthesize.
+        spk_id : int | None
+            The ID of the speaker to use (must be in training set); either this or spk_dvec must be provided.
+        spk_dvec : Tensor [256] | None
+            The new speaker d-vector extracted by Resemblyzer.
+        z : Tensor [z_dim] | None
+            If None, sample from N(0, σ²)
+        use_ref_mel : Tensor [1, 80, T] | None
+            Optional reference speech to extract prosody (μ) as z
+        sigma : float
+            Sampling std scaling; the smaller the prosody, the more "average"
+        """
+        # -------- 1. Text to id ----------
+        seq = torch.LongTensor(text_to_sequence(text, ["english_cleaners"])).unsqueeze(0).to(device)
+        text_len = torch.LongTensor([seq.size(1)]).to(device)
+
+        # -------- 2. speaker embedding ----------
+        if spk_dvec is not None:
+            e_spk_raw = spk_dvec.to(device).unsqueeze(0)            # [1,256]
+        elif spk_id is not None:
+            if spk_id not in SPK_ID2I_lookup:
+                raise ValueError(f"Unknown speaker ID: {spk_id}, please select within {list(SPK_ID2I_lookup.keys())}, or use spk_dvec instead.")
+            idx = SPK_ID2I_lookup[spk_id] if isinstance(spk_id, int) else spk_id
+            e_spk_raw = self.spk_emb[idx].unsqueeze(0).to(device)  # lookup
+        else:
+            raise ValueError("Must provide spk_id or spk_dvec.")
+        e_spk = self.spk_proj(e_spk_raw)              # [1,128]
+
+        # -------- 3. latent z ----------
+        if use_ref_mel is not None:
+            mu, _ = self.ref_enc(use_ref_mel.to(device))  # [1,z]
+            z = mu                                        # prosody transfer
+        elif z is None:
+            z = torch.randn(1, self.cond_proj.in_features - e_spk.size(1), device=device) * sigma
+        z = z.to(device)
+
+        cond = self.cond_proj(torch.cat([e_spk, z], -1))  # [1,512]
+
+        # -------- 4. Encoder ----------
+        emb = self.tts.embedding(seq).transpose(1, 2)     # [1,512,T]
+        enc_out = self.tts.encoder(emb, text_len)         # [1,T,512]
+        enc_out = enc_out + cond.unsqueeze(1)             # broadcast
+
+        # -------- 5. Decoder inference ----------
+        mel_out, gate_out, align, mel_lens = self.tts.decoder.infer(enc_out, text_len)
+
+        mel_post = mel_out + self.tts.postnet(mel_out)    # refine
+
+       
+        return {
+            "mel": mel_post.squeeze(0).cpu(),             # [80, T]
+            "gate": gate_out.squeeze(0).cpu(),            # [T]
+            "alignment": align.squeeze(1).cpu(),          # [T_enc, T_dec]
+            "z": z.squeeze(0).cpu(),
+        }
+       
+        
 
 
 # -----------------------------------------------------------------------------

@@ -18,13 +18,13 @@ def wav_to_mel(wav, sr=SR):
     return torch.from_numpy(mel).float()    # [80, T]
 
 class VCTKDataset(Dataset):
-    def __init__(self, root, selecting_speaker = True, cache_mel=True):
+    def __init__(self, root, selecting_speaker = True, cache_mel=True, selected_speakers_path="src/speaker_embedding/selected_speakers.txt"):
         self.root = Path(root)
         self.cache_mel = cache_mel
         wav_root = self.root / "wav48_silence_trimmed"
         txt_root = self.root / "txt"
         if selecting_speaker:
-            with open(self.root / "selected_speakers.txt") as f:
+            with open(selected_speakers_path) as f:
                 speakers = [line.strip() for line in f if line.strip()]
                 print(f"Selected speakers: {speakers}")
         else:
