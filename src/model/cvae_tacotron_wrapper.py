@@ -89,20 +89,20 @@ class CVAETacotron2(nn.Module):
         embedded = self.tts.embedding(text_ids)        # [B, T, 512]  (Float)
         embedded = embedded.transpose(1, 2)            # [B, 512, T]
 
-        # ---------- Encoder (★ 传入 input_lengths，且不要 transpose) ----------
+        # ---------- Encoder  ----------
         enc_out = self.tts.encoder(embedded, text_lens)    # [B, T, 512]
 
-        # ---------- 加条件 ----------
+        # ---------- add condition ----------
         enc_out = enc_out + cond.unsqueeze(1)          # broadcast add
 
         # ---------- Decoder (teacher forcing) ----------
-        # 顺序: decoder(memory, decoder_inputs, memory_lengths)
+        # order: decoder(memory, decoder_inputs, memory_lengths)
         mel_out, gate_out, align = self.tts.decoder(
             enc_out, mel_gt, text_lens)
 
         mel_post = mel_out + self.tts.postnet(mel_out)
 
-        # ---------- 恢复原顺序 ----------
+        # ---------- to right order ----------
         inv_idx  = sort_idx.argsort()
         return (mel_post[inv_idx], mel_out[inv_idx],
                 gate_out[inv_idx], mu[inv_idx], logvar[inv_idx])
