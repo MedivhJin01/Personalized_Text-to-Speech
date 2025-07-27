@@ -44,7 +44,8 @@ class VCTKDataset(Dataset):
                 self.id2info[i] = f"{s}: {info['gender']}, {info['age']}yo, {info['accent']} ({info['region']})"
             else:
                 self.id2info[i] = f"Speaker {s}"
-        print(f"speaker info: {self.id2info}")
+            print(f"Speaker {i}: {self.id2info[i]}")
+        
 
 
         self.items = []
