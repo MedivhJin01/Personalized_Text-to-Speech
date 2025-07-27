@@ -91,8 +91,8 @@ class CVAETacotron2(nn.Module):
         cond  = self.cond_proj(torch.cat([e_spk, z], -1))
 
         # encoder: embed → conv → bLSTM (pretrained & frozen)
-        embedded = self.tts.embedding(text_ids).transpose(1, 2)  # [B,512?,L]
-        enc_out  = self.tts.encoder(embedded, text_lens)          # [B,L,512]
+        embedded = self.tts.embedding(text_ids).transpose(1, 2)  # [B,txt_emb_size,L]
+        enc_out  = self.tts.encoder(embedded, text_lens)          # [B,L,txt_emb_size]
         enc_out  = enc_out + cond.unsqueeze(1)                   # broadcast add
 
         # decoder teacher-forcing
