@@ -171,7 +171,7 @@ def main():
     parser.add_argument(
         "--model_path",
         type=str,
-        default="checkpoints/vae_tacotron2_best.pt",
+        default="src/model/check_points/vae_tacotron2_best.pt",
         help="Path to trained model checkpoint",
     )
     parser.add_argument(
