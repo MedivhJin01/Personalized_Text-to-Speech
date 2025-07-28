@@ -262,7 +262,15 @@ def validate(vae, dataloader, device, speaker_embeddings, dataset, use_tacotron2
                 if use_tacotron2 and batch_texts:
                     recon, mu, logvar = vae(mel_pad, spk_emb_batch, batch_texts)
                 else:
-                    recon, mu, logvar = vae(mel_pad, spk_emb_batch, None)
+                    # If Tacotron2 is enabled but no text, skip this batch
+                    if use_tacotron2:
+                        print(
+                            f"Skipping validation batch {batch_idx}: Tacotron2 enabled but no text available"
+                        )
+                        continue
+                    else:
+                        # Use fallback decoder only when Tacotron2 is disabled
+                        recon, mu, logvar = vae(mel_pad, spk_emb_batch, None)
 
                 loss, recon_loss, kld = vae_loss(
                     recon, mel_pad, mu, logvar, kl_weight=1e-4
@@ -351,8 +359,15 @@ for epoch in range(start_epoch, EPOCHS + 1):
             if args.use_tacotron2 and batch_texts:
                 recon, mu, logvar = vae(mel_pad, spk_emb_batch, batch_texts)
             else:
-                # Use fallback decoder
-                recon, mu, logvar = vae(mel_pad, spk_emb_batch, None)
+                # If Tacotron2 is enabled but no text, skip this batch
+                if args.use_tacotron2:
+                    print(
+                        f"Skipping batch {batch_idx}: Tacotron2 enabled but no text available"
+                    )
+                    continue
+                else:
+                    # Use fallback decoder only when Tacotron2 is disabled
+                    recon, mu, logvar = vae(mel_pad, spk_emb_batch, None)
 
             loss, recon_loss, kld = vae_loss(recon, mel_pad, mu, logvar, kl_weight)
 

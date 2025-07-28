@@ -369,6 +369,11 @@ class VAE(nn.Module):
         z: [B, latent_dim]
         T: int, target length
         """
+        if not hasattr(self, "decoder_input_proj"):
+            raise RuntimeError(
+                "Fallback decoder not available. Tacotron2 is being used but no text was provided."
+            )
+
         B = z.size(0)
         # Expand z to all time steps
         z_exp = z.unsqueeze(1).expand(-1, T, -1)
@@ -388,9 +393,15 @@ class VAE(nn.Module):
         mu, logvar = self.encode(mel, spk_emb)
         z = self.reparameterize(mu, logvar)
 
-        if self.use_tacotron2 and text is not None:
-            # Use Tacotron2 for decoding
-            recon = self.decode_with_tacotron2(z, text)
+        if self.use_tacotron2:
+            if text is not None:
+                # Use Tacotron2 for decoding
+                recon = self.decode_with_tacotron2(z, text)
+            else:
+                # Tacotron2 is enabled but no text provided
+                raise ValueError(
+                    "Text is required when using Tacotron2. Please provide text input."
+                )
         else:
             # Use fallback decoder
             T = mel.size(2)
