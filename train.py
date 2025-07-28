@@ -146,6 +146,26 @@ print("\n=== Model Information ===")
 total_params, trainable_params = vae.count_parameters()
 print(f"Model initialized with fine_tune_decoder={args.fine_tune_decoder}")
 
+# --- Optimizer & Scheduler ---
+if args.use_tacotron2 and args.fine_tune_decoder:
+    # Use parameter groups with different learning rates
+    param_groups = vae.get_parameter_groups(
+        vae_lr=args.vae_lr, decoder_lr=args.decoder_lr, postnet_lr=args.postnet_lr
+    )
+    optimizer = optim.Adam(param_groups)
+    print("\n=== Parameter Groups ===")
+    for group in param_groups:
+        print(
+            f"{group['name']}: lr={group['lr']}, params={sum(p.numel() for p in group['params']):,}"
+        )
+else:
+    # Use standard optimizer for all parameters
+    optimizer = optim.Adam(vae.parameters(), lr=args.vae_lr)
+
+scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+    optimizer, "min", patience=5, factor=0.5, verbose=True
+)
+
 # --- Load checkpoint if resuming ---
 start_epoch = 1
 if args.resume and os.path.exists(args.resume):
@@ -182,27 +202,6 @@ if args.resume and os.path.exists(args.resume):
         print("Warning: use_tacotron2 setting differs from checkpoint")
 else:
     best_loss = float("inf")
-
-
-# --- Optimizer & Scheduler ---
-if args.use_tacotron2 and args.fine_tune_decoder:
-    # Use parameter groups with different learning rates
-    param_groups = vae.get_parameter_groups(
-        vae_lr=args.vae_lr, decoder_lr=args.decoder_lr, postnet_lr=args.postnet_lr
-    )
-    optimizer = optim.Adam(param_groups)
-    print("\n=== Parameter Groups ===")
-    for group in param_groups:
-        print(
-            f"{group['name']}: lr={group['lr']}, params={sum(p.numel() for p in group['params']):,}"
-        )
-else:
-    # Use standard optimizer for all parameters
-    optimizer = optim.Adam(vae.parameters(), lr=args.vae_lr)
-
-scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-    optimizer, "min", patience=5, factor=0.5, verbose=True
-)
 
 
 # --- KL Annealing ---
