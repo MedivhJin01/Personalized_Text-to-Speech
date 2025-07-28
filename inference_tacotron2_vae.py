@@ -155,7 +155,6 @@ def synthesize_speech(
     if speaker_embedding is None and latent_z is None:
         print("No speaker embedding or latent provided, using random embedding...")
         speaker_embedding = torch.randn(1, 256).to(device)
-    import torch
     with torch.no_grad():
         try:
             # Synthesize mel spectrogram using the new decoder method
@@ -392,136 +391,143 @@ def main():
         print("No speaker specified, using random speaker embedding...")
         speaker_embedding = torch.randn(1, 256).to(device)
 
-    # Handle latent extraction if requested
-    if args.extract_latent and os.path.exists(args.extract_latent):
-        if speaker_embedding is None:
-            print("Error: Speaker embedding required for latent extraction")
-            return
+    with torch.no_grad():
+        # Handle latent extraction if requested
+        if args.extract_latent and os.path.exists(args.extract_latent):
+            if speaker_embedding is None:
+                print("Error: Speaker embedding required for latent extraction")
+                return
 
-        print(f"Extracting latent from {args.extract_latent}")
-        mel_spectrogram = np.load(args.extract_latent)
-        mel_tensor = torch.tensor(mel_spectrogram, dtype=torch.float32, device=device)
-        if mel_tensor.dim() == 2:
-            mel_tensor = mel_tensor.unsqueeze(0)  # Add batch dimension
-
-        latent_z = extract_latent_from_audio(vae, mel_tensor, speaker_embedding, device)
-
-        # Save extracted latent
-        latent_path = args.extract_latent.replace(".npy", "_extracted_latent.npy")
-        np.save(latent_path, latent_z[0].cpu().numpy())
-        print(f"Extracted latent saved to: {latent_path}")
-
-        # Use extracted latent for synthesis
-        speaker_embedding = None
-
-    # Synthesize speech
-    print(f"Synthesizing text: '{args.text}'")
-
-    # Use custom synthesis function with max_decoder_steps
-    if latent_z is not None:
-        print("Using provided latent representation for synthesis...")
-        with torch.no_grad():
-            mel_output, alignments = vae.synthesize_with_decoder(
-                [args.text], latent_z, max_decoder_steps=args.max_decoder_steps
+            print(f"Extracting latent from {args.extract_latent}")
+            mel_spectrogram = np.load(args.extract_latent)
+            mel_tensor = torch.tensor(
+                mel_spectrogram, dtype=torch.float32, device=device
             )
-    else:
-        print("Using speaker embedding for synthesis...")
-        # Convert speaker embedding to latent space if needed
-        if speaker_embedding.size(-1) != vae.latent_dim:
-            print(
-                f"Projecting speaker embedding from {speaker_embedding.size(-1)} to {vae.latent_dim} dimensions..."
-            )
-            latent_z = vae.speaker_projection(speaker_embedding)
-        else:
-            latent_z = speaker_embedding
+            if mel_tensor.dim() == 2:
+                mel_tensor = mel_tensor.unsqueeze(0)  # Add batch dimension
 
-        with torch.no_grad():
-            mel_output, alignments = vae.synthesize_with_decoder(
-                [args.text], latent_z, max_decoder_steps=args.max_decoder_steps
+            latent_z = extract_latent_from_audio(
+                vae, mel_tensor, speaker_embedding, device
             )
 
-    print(f"Generated mel spectrogram shape: {mel_output.shape}")
-    print(f"Generated alignments shape: {alignments.shape}")
+            # Save extracted latent
+            latent_path = args.extract_latent.replace(".npy", "_extracted_latent.npy")
+            np.save(latent_path, latent_z[0].cpu().numpy())
+            print(f"Extracted latent saved to: {latent_path}")
 
-    # Save intermediate outputs if requested
-    if args.save_intermediate:
-        mel_path = args.output_path.replace(".wav", "_mel.npy")
-        alignments_path = args.output_path.replace(".wav", "_alignments.npy")
-        np.save(mel_path, mel_output[0].cpu().numpy())
-        np.save(alignments_path, alignments[0].cpu().numpy())
-        print(f"Intermediate outputs saved: {mel_path}, {alignments_path}")
+            # Use extracted latent for synthesis
+            speaker_embedding = None
 
-    # Convert to audio using WaveGlow (if available)
-    try:
-        import torch.hub
+        # Synthesize speech
+        print(f"Synthesizing text: '{args.text}'")
 
-        waveglow = torch.hub.load(
-            "NVIDIA/DeepLearningExamples:torchhub",
-            "nvidia_waveglow",
-            model_math="fp16",
-        )
-        waveglow = waveglow.remove_weightnorm(waveglow)
-        waveglow = waveglow.to(device)
-        waveglow.eval()
-
-        print("Converting mel spectrogram to audio using WaveGlow...")
-        audio = waveglow.infer(mel_output)
-        audio_numpy = audio[0].data.cpu().numpy()
-        rate = 22050
-
-        # Save audio
-        write(args.output_path, rate, audio_numpy)
-        print(f"Audio saved to: {args.output_path}")
-
-        # Save alignments for visualization
-        alignments_path = args.output_path.replace(".wav", "_alignments.npy")
-        np.save(alignments_path, alignments[0].cpu().numpy())
-        print(f"Alignments saved to: {alignments_path}")
-
-        # Create alignment visualization if requested
-        if args.visualize_alignments:
-            alignments_viz_path = args.output_path.replace(".wav", "_alignments.png")
-            visualize_alignments(
-                alignments[0].cpu().numpy(), args.text, alignments_viz_path
-            )
-
-        print("Synthesis completed successfully!")
-
-    except Exception as e:
-        print(f"WaveGlow not available: {e}")
-        print("Saving mel spectrogram instead...")
-
-        # Save mel spectrogram
-        mel_np = mel_output[0].cpu().numpy()
-        mel_path = args.output_path.replace(".wav", "_mel.npy")
-        np.save(mel_path, mel_np)
-        print(f"Mel spectrogram saved to: {mel_path}")
-
-        # Save alignments
-        alignments_path = args.output_path.replace(".wav", "_alignments.npy")
-        np.save(alignments_path, alignments[0].cpu().numpy())
-        print(f"Alignments saved to: {alignments_path}")
-
-        # Create alignment visualization if requested
-        if args.visualize_alignments:
-            alignments_viz_path = args.output_path.replace(".wav", "_alignments.png")
-            visualize_alignments(
-                alignments[0].cpu().numpy(), args.text, alignments_viz_path
-            )
-
-        print("Synthesis completed (mel spectrogram only)!")
-
-    # Print summary if verbose
-    if args.verbose:
-        print(f"\n=== Synthesis Summary ===")
-        print(f"Input text: {args.text}")
-        print(f"Mel spectrogram shape: {mel_output.shape}")
-        print(f"Alignments shape: {alignments.shape}")
+        # Use custom synthesis function with max_decoder_steps
         if latent_z is not None:
-            print(f"Latent representation shape: {latent_z.shape}")
-        if speaker_embedding is not None:
-            print(f"Speaker embedding shape: {speaker_embedding.shape}")
-        print(f"Output saved to: {args.output_path}")
+            print("Using provided latent representation for synthesis...")
+            mel_output, alignments = vae.synthesize_with_decoder(
+                [args.text], latent_z, max_decoder_steps=args.max_decoder_steps
+            )
+        else:
+            print("Using speaker embedding for synthesis...")
+            # Convert speaker embedding to latent space if needed
+            if speaker_embedding.size(-1) != vae.latent_dim:
+                print(
+                    f"Projecting speaker embedding from {speaker_embedding.size(-1)} to {vae.latent_dim} dimensions..."
+                )
+                latent_z = vae.speaker_projection(speaker_embedding)
+            else:
+                latent_z = speaker_embedding
+
+            mel_output, alignments = vae.synthesize_with_decoder(
+                [args.text], latent_z, max_decoder_steps=args.max_decoder_steps
+            )
+
+        print(f"Generated mel spectrogram shape: {mel_output.shape}")
+        print(f"Generated alignments shape: {alignments.shape}")
+
+        # Save intermediate outputs if requested
+        if args.save_intermediate:
+            mel_path = args.output_path.replace(".wav", "_mel.npy")
+            alignments_path = args.output_path.replace(".wav", "_alignments.npy")
+            np.save(mel_path, mel_output[0].cpu().numpy())
+            np.save(alignments_path, alignments[0].cpu().numpy())
+            print(f"Intermediate outputs saved: {mel_path}, {alignments_path}")
+
+        # Convert to audio using WaveGlow (if available)
+        try:
+            import torch.hub
+
+            waveglow = torch.hub.load(
+                "NVIDIA/DeepLearningExamples:torchhub",
+                "nvidia_waveglow",
+                model_math="fp16",
+            )
+            waveglow = waveglow.remove_weightnorm(waveglow)
+            waveglow = waveglow.to(device)
+            waveglow.eval()
+
+            print("Converting mel spectrogram to audio using WaveGlow...")
+            audio = waveglow.infer(mel_output)
+            audio_numpy = audio[0].data.cpu().numpy()
+            rate = 22050
+
+            # Save audio
+            write(args.output_path, rate, audio_numpy)
+            print(f"Audio saved to: {args.output_path}")
+
+            # Save alignments for visualization
+            alignments_path = args.output_path.replace(".wav", "_alignments.npy")
+            np.save(alignments_path, alignments[0].cpu().numpy())
+            print(f"Alignments saved to: {alignments_path}")
+
+            # Create alignment visualization if requested
+            if args.visualize_alignments:
+                alignments_viz_path = args.output_path.replace(
+                    ".wav", "_alignments.png"
+                )
+                visualize_alignments(
+                    alignments[0].cpu().numpy(), args.text, alignments_viz_path
+                )
+
+            print("Synthesis completed successfully!")
+
+        except Exception as e:
+            print(f"WaveGlow not available: {e}")
+            print("Saving mel spectrogram instead...")
+
+            # Save mel spectrogram
+            mel_np = mel_output[0].cpu().numpy()
+            mel_path = args.output_path.replace(".wav", "_mel.npy")
+            np.save(mel_path, mel_np)
+            print(f"Mel spectrogram saved to: {mel_path}")
+
+            # Save alignments
+            alignments_path = args.output_path.replace(".wav", "_alignments.npy")
+            np.save(alignments_path, alignments[0].cpu().numpy())
+            print(f"Alignments saved to: {alignments_path}")
+
+            # Create alignment visualization if requested
+            if args.visualize_alignments:
+                alignments_viz_path = args.output_path.replace(
+                    ".wav", "_alignments.png"
+                )
+                visualize_alignments(
+                    alignments[0].cpu().numpy(), args.text, alignments_viz_path
+                )
+
+            print("Synthesis completed (mel spectrogram only)!")
+
+        # Print summary if verbose
+        if args.verbose:
+            print(f"\n=== Synthesis Summary ===")
+            print(f"Input text: {args.text}")
+            print(f"Mel spectrogram shape: {mel_output.shape}")
+            print(f"Alignments shape: {alignments.shape}")
+            if latent_z is not None:
+                print(f"Latent representation shape: {latent_z.shape}")
+            if speaker_embedding is not None:
+                print(f"Speaker embedding shape: {speaker_embedding.shape}")
+            print(f"Output saved to: {args.output_path}")
 
 
 if __name__ == "__main__":

@@ -259,8 +259,8 @@ class VAE(nn.Module):
             params.extend(self.tacotron2.postnet.parameters())
             params.extend(self.tacotron2.attention.parameters())
 
-        # Fallback decoder parameters
-        if not self.use_tacotron2:
+        # Fallback decoder parameters (only if Tacotron2 is not used)
+        if not self.use_tacotron2 and hasattr(self, "decoder_input_proj"):
             params.extend(self.decoder_input_proj.parameters())
             params.extend(self.decoder_lstm.parameters())
             params.extend(self.decoder_out.parameters())
@@ -321,8 +321,8 @@ class VAE(nn.Module):
                     }
                 )
 
-        # Fallback decoder parameters
-        if not self.use_tacotron2:
+        # Fallback decoder parameters (only if Tacotron2 is not used)
+        if not self.use_tacotron2 and hasattr(self, "decoder_input_proj"):
             fallback_params = []
             fallback_params.extend(self.decoder_input_proj.parameters())
             fallback_params.extend(self.decoder_lstm.parameters())
@@ -351,6 +351,12 @@ class VAE(nn.Module):
                 print(f"{name}: {param.numel():,} parameters (trainable)")
             else:
                 print(f"{name}: {param.numel():,} parameters (frozen)")
+
+        # Check for fallback decoder components that might not exist
+        if not self.use_tacotron2 and not hasattr(self, "decoder_input_proj"):
+            print(
+                "Note: Fallback decoder components not initialized (Tacotron2 is being used)"
+            )
 
         print(f"\nTotal parameters: {total_params:,}")
         print(f"Trainable parameters: {trainable_params:,}")
