@@ -163,17 +163,10 @@ def synthesize_speech(
                 mel_output, alignments = vae.synthesize_with_decoder(text, latent_z)
             else:
                 print("Using speaker embedding for synthesis...")
-                # Convert speaker embedding to latent space if needed
-                if speaker_embedding.size(-1) != vae.latent_dim:
-                    print(
-                        f"Projecting speaker embedding from {speaker_embedding.size(-1)} to {vae.latent_dim} dimensions..."
-                    )
-                    # Use the speaker projection layer to convert to latent space
-                    latent_z = vae.speaker_projection(speaker_embedding)
-                else:
-                    latent_z = speaker_embedding
-
-                mel_output, alignments = vae.synthesize_with_decoder(text, latent_z)
+                # Use direct speaker embedding synthesis (simpler approach)
+                mel_output, alignments = vae.synthesize_with_speaker_embedding(
+                    text, speaker_embedding
+                )
 
             print(f"Generated mel spectrogram shape: {mel_output.shape}")
             print(f"Generated alignments shape: {alignments.shape}")
@@ -437,17 +430,10 @@ def main():
             )
         else:
             print("Using speaker embedding for synthesis...")
-            # Convert speaker embedding to latent space if needed
-            if speaker_embedding.size(-1) != vae.latent_dim:
-                print(
-                    f"Projecting speaker embedding from {speaker_embedding.size(-1)} to {vae.latent_dim} dimensions..."
-                )
-                latent_z = vae.speaker_projection(speaker_embedding)
-            else:
-                latent_z = speaker_embedding
-
-            mel_output, alignments = vae.synthesize_with_decoder(
-                [args.text], latent_z, max_decoder_steps=args.max_decoder_steps
+            # Use direct speaker embedding synthesis (simpler approach)
+            print("Using direct speaker embedding synthesis...")
+            mel_output, alignments = vae.synthesize_with_speaker_embedding(
+                [args.text], speaker_embedding, max_decoder_steps=args.max_decoder_steps
             )
 
         print(f"Generated mel spectrogram shape: {mel_output.shape}")
