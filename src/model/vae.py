@@ -163,8 +163,12 @@ class VAE(nn.Module):
             mel_outputs = []
             alignments = []
 
-            # Initialize decoder
-            decoder_input = torch.zeros(sequences.size(0), self.n_mels).to(self.device)
+            # Initialize decoder with proper input size for Tacotron2
+            # Tacotron2 decoder expects input of size decoder_rnn_input_size
+            decoder_rnn_input_size = self.tacotron2.decoder.decoder_rnn.input_size
+            decoder_input = torch.zeros(sequences.size(0), decoder_rnn_input_size).to(
+                self.device
+            )
 
             # Initialize LSTM states properly for Tacotron2 decoder
             # The decoder RNN expects hidden states in the format (h, c) where each is 2D
@@ -208,8 +212,10 @@ class VAE(nn.Module):
                     )
                 attention_context = torch.bmm(attention_weights, encoder_outputs)
 
-                # Combine decoder input with attention context
-                decoder_input = torch.cat([decoder_input, attention_context], dim=-1)
+                # Prepare decoder input properly for Tacotron2
+                # The decoder expects mel input concatenated with attention context
+                mel_input = decoder_input[:, :, : self.n_mels]  # Extract mel part
+                decoder_input = torch.cat([mel_input, attention_context], dim=-1)
                 # Squeeze to remove the time dimension for LSTM input
                 decoder_input = decoder_input.squeeze(1)
 
@@ -478,8 +484,12 @@ class VAE(nn.Module):
             mel_outputs = []
             alignments = []
 
-            # Initialize decoder
-            decoder_input = torch.zeros(sequences.size(0), self.n_mels).to(self.device)
+            # Initialize decoder with proper input size for Tacotron2
+            # Tacotron2 decoder expects input of size decoder_rnn_input_size
+            decoder_rnn_input_size = self.tacotron2.decoder.decoder_rnn.input_size
+            decoder_input = torch.zeros(sequences.size(0), decoder_rnn_input_size).to(
+                self.device
+            )
 
             # Initialize LSTM states properly for Tacotron2 decoder
             # The decoder RNN expects hidden states in the format (h, c) where each is 2D
@@ -523,8 +533,10 @@ class VAE(nn.Module):
                     )
                 attention_context = torch.bmm(attention_weights, encoder_outputs)
 
-                # Combine decoder input with attention context
-                decoder_input = torch.cat([decoder_input, attention_context], dim=-1)
+                # Prepare decoder input properly for Tacotron2
+                # The decoder expects mel input concatenated with attention context
+                mel_input = decoder_input[:, :, : self.n_mels]  # Extract mel part
+                decoder_input = torch.cat([mel_input, attention_context], dim=-1)
                 # Squeeze to remove the time dimension for LSTM input
                 decoder_input = decoder_input.squeeze(1)
 
@@ -615,8 +627,12 @@ class VAE(nn.Module):
             mel_outputs = []
             alignments = []
 
-            # Initialize decoder
-            decoder_input = torch.zeros(sequences.size(0), self.n_mels).to(self.device)
+            # Initialize decoder with proper input size for Tacotron2
+            # Tacotron2 decoder expects input of size decoder_rnn_input_size
+            decoder_rnn_input_size = self.tacotron2.decoder.decoder_rnn.input_size
+            decoder_input = torch.zeros(sequences.size(0), decoder_rnn_input_size).to(
+                self.device
+            )
 
             # Initialize LSTM states properly for Tacotron2 decoder
             # The decoder RNN expects hidden states in the format (h, c) where each is 2D
@@ -660,8 +676,10 @@ class VAE(nn.Module):
                     )
                 attention_context = torch.bmm(attention_weights, encoder_outputs)
 
-                # Combine decoder input with attention context
-                decoder_input = torch.cat([decoder_input, attention_context], dim=-1)
+                # Prepare decoder input properly for Tacotron2
+                # The decoder expects mel input concatenated with attention context
+                mel_input = decoder_input[:, :, : self.n_mels]  # Extract mel part
+                decoder_input = torch.cat([mel_input, attention_context], dim=-1)
                 # Squeeze to remove the time dimension for LSTM input
                 decoder_input = decoder_input.squeeze(1)
 
