@@ -44,12 +44,7 @@ parser.add_argument(
     default=True,
     help="Use Tacotron2 as decoder (default: True)",
 )
-parser.add_argument(
-    "--fine_tune_decoder",
-    action="store_true",
-    default=True,
-    help="Fine-tune Tacotron2 decoder (default: True)",
-)
+
 parser.add_argument(
     "--batch_size",
     type=int,
@@ -68,18 +63,7 @@ parser.add_argument(
     default=1e-4,
     help="Learning rate for VAE components",
 )
-parser.add_argument(
-    "--decoder_lr",
-    type=float,
-    default=1e-5,
-    help="Learning rate for Tacotron2 decoder",
-)
-parser.add_argument(
-    "--postnet_lr",
-    type=float,
-    default=1e-5,
-    help="Learning rate for Tacotron2 postnet",
-)
+
 parser.add_argument(
     "--resume",
     type=str,
@@ -130,37 +114,26 @@ dataloader = DataLoader(
 )
 
 # --- Models ---
-# Initialize VAE with Tacotron2 decoder and fine-tuning
+# Initialize VAE with Tacotron2 decoder (no fine-tuning)
+print(f"Initializing VAE with use_tacotron2={args.use_tacotron2}")
 vae = VAE(
     n_mels=80,
     spk_emb_dim=256,
     latent_dim=64,
     hidden_dim=256,
     use_tacotron2=args.use_tacotron2,
-    fine_tune_decoder=args.fine_tune_decoder,
+    fine_tune_decoder=False,  # Always set to False
     device=DEVICE,
 ).to(DEVICE)
 
 # Print model information
 print("\n=== Model Information ===")
 total_params, trainable_params = vae.count_parameters()
-print(f"Model initialized with fine_tune_decoder={args.fine_tune_decoder}")
+print("Model initialized with fine_tune_decoder=False")
 
 # --- Optimizer & Scheduler ---
-if args.use_tacotron2 and args.fine_tune_decoder:
-    # Use parameter groups with different learning rates
-    param_groups = vae.get_parameter_groups(
-        vae_lr=args.vae_lr, decoder_lr=args.decoder_lr, postnet_lr=args.postnet_lr
-    )
-    optimizer = optim.Adam(param_groups)
-    print("\n=== Parameter Groups ===")
-    for group in param_groups:
-        print(
-            f"{group['name']}: lr={group['lr']}, params={sum(p.numel() for p in group['params']):,}"
-        )
-else:
-    # Use standard optimizer for all parameters
-    optimizer = optim.Adam(vae.parameters(), lr=args.vae_lr)
+# Use standard optimizer for all parameters (no fine-tuning)
+optimizer = optim.Adam(vae.parameters(), lr=args.vae_lr)
 
 scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
     optimizer, "min", patience=5, factor=0.5, verbose=True
@@ -176,15 +149,7 @@ if args.resume and os.path.exists(args.resume):
     vae.load_state_dict(checkpoint["vae"])
 
     # Load optimizer and scheduler state
-    if args.use_tacotron2 and args.fine_tune_decoder:
-        # Recreate parameter groups and optimizer
-        param_groups = vae.get_parameter_groups(
-            vae_lr=args.vae_lr, decoder_lr=args.decoder_lr, postnet_lr=args.postnet_lr
-        )
-        optimizer = optim.Adam(param_groups)
-    else:
-        optimizer = optim.Adam(vae.parameters(), lr=args.vae_lr)
-
+    optimizer = optim.Adam(vae.parameters(), lr=args.vae_lr)
     optimizer.load_state_dict(checkpoint["optimizer"])
     scheduler.load_state_dict(checkpoint["scheduler"])
 
@@ -196,8 +161,6 @@ if args.resume and os.path.exists(args.resume):
     print(f"Previous best loss: {best_loss:.4f}")
 
     # Verify configuration matches
-    if checkpoint.get("fine_tune_decoder") != args.fine_tune_decoder:
-        print("Warning: fine_tune_decoder setting differs from checkpoint")
     if checkpoint.get("use_tacotron2") != args.use_tacotron2:
         print("Warning: use_tacotron2 setting differs from checkpoint")
 else:
@@ -211,6 +174,19 @@ def get_kl_weight(epoch, kl_anneal_epochs=10, max_kl_weight=1e-4):
 
 # --- Loss ---
 def vae_loss(recon, target, mu, logvar, kl_weight):
+    """Compute VAE loss with shape validation."""
+    # Ensure inputs have the same shape
+    if recon.shape != target.shape:
+        # Resize recon to match target if needed
+        if target.shape[-1] != recon.shape[-1]:
+            recon = F.interpolate(
+                recon, size=target.shape[-1], mode="linear", align_corners=False
+            )
+        if target.shape[1] != recon.shape[1]:
+            recon = F.interpolate(
+                recon, size=target.shape[1], mode="linear", align_corners=False
+            )
+
     recon_loss = F.mse_loss(recon, target)  # Changed to MSE for better stability
     kld = -0.5 * torch.mean(1 + logvar - mu.pow(2) - logvar.exp())
     return recon_loss + kl_weight * kld, recon_loss, kld
@@ -271,6 +247,26 @@ def validate(vae, dataloader, device, speaker_embeddings, dataset, use_tacotron2
                         # Use fallback decoder only when Tacotron2 is disabled
                         recon, mu, logvar = vae(mel_pad, spk_emb_batch, None)
 
+                # Ensure mel_pad and recon have the same shape for loss calculation
+                if mel_pad.shape != recon.shape:
+                    # Resize recon to match mel_pad if needed
+                    if mel_pad.shape[-1] != recon.shape[-1]:
+                        # Interpolate recon to match mel_pad time dimension
+                        recon = F.interpolate(
+                            recon,
+                            size=mel_pad.shape[-1],
+                            mode="linear",
+                            align_corners=False,
+                        )
+                    if mel_pad.shape[1] != recon.shape[1]:
+                        # Interpolate recon to match mel_pad mel dimension
+                        recon = F.interpolate(
+                            recon,
+                            size=mel_pad.shape[1],
+                            mode="linear",
+                            align_corners=False,
+                        )
+
                 loss, recon_loss, kld = vae_loss(
                     recon, mel_pad, mu, logvar, kl_weight=1e-4
                 )
@@ -299,7 +295,12 @@ def extract_text_from_dataset_item(item):
     # This is a simplified version - you might need to adjust based on your dataset structure
     if isinstance(item, (list, tuple)) and len(item) > 1:
         # Assuming item[1] contains the text
-        return str(item[1])
+        text = str(item[1])
+        # Clean and validate text for Tacotron2
+        if text and len(text.strip()) > 0:
+            return text.strip()
+        else:
+            return "Hello world"
     else:
         # Fallback to a default text
         return "Hello world"
@@ -312,7 +313,6 @@ print(f"\n=== Starting Training ===")
 print(f"Epochs: {EPOCHS}")
 print(f"Batch size: {BATCH_SIZE}")
 print(f"Use Tacotron2: {args.use_tacotron2}")
-print(f"Fine-tune decoder: {args.fine_tune_decoder}")
 print(f"Starting from epoch: {start_epoch}")
 
 for epoch in range(start_epoch, EPOCHS + 1):
@@ -350,6 +350,13 @@ for epoch in range(start_epoch, EPOCHS + 1):
                 else:
                     text = "Hello world"  # Fallback
                 batch_texts.append(text)
+
+            # Validate that we have valid texts for all items in the batch
+            if not all(text and len(text.strip()) > 0 for text in batch_texts):
+                print(
+                    f"Warning: Some texts in batch {batch_idx} are empty, using fallback"
+                )
+                batch_texts = ["Hello world"] * len(spk_ids)
         else:
             batch_texts = None
 
@@ -368,18 +375,30 @@ for epoch in range(start_epoch, EPOCHS + 1):
                     # Use fallback decoder only when Tacotron2 is disabled
                     recon, mu, logvar = vae(mel_pad, spk_emb_batch, None)
 
+            # Ensure mel_pad and recon have the same shape for loss calculation
+            if mel_pad.shape != recon.shape:
+                # Resize recon to match mel_pad if needed
+                if mel_pad.shape[-1] != recon.shape[-1]:
+                    # Interpolate recon to match mel_pad time dimension
+                    recon = F.interpolate(
+                        recon,
+                        size=mel_pad.shape[-1],
+                        mode="linear",
+                        align_corners=False,
+                    )
+                if mel_pad.shape[1] != recon.shape[1]:
+                    # Interpolate recon to match mel_pad mel dimension
+                    recon = F.interpolate(
+                        recon, size=mel_pad.shape[1], mode="linear", align_corners=False
+                    )
+
             loss, recon_loss, kld = vae_loss(recon, mel_pad, mu, logvar, kl_weight)
 
             optimizer.zero_grad()
             loss.backward()
 
             # Gradient clipping
-            if args.use_tacotron2 and args.fine_tune_decoder:
-                # Clip gradients for each parameter group separately
-                for group in param_groups:
-                    torch.nn.utils.clip_grad_norm_(group["params"], max_norm=1.0)
-            else:
-                torch.nn.utils.clip_grad_norm_(vae.parameters(), max_norm=1.0)
+            torch.nn.utils.clip_grad_norm_(vae.parameters(), max_norm=1.0)
 
             optimizer.step()
 
@@ -430,7 +449,6 @@ for epoch in range(start_epoch, EPOCHS + 1):
                 "scheduler": scheduler.state_dict(),
                 "loss": avg_loss,
                 "use_tacotron2": args.use_tacotron2,
-                "fine_tune_decoder": args.fine_tune_decoder,
                 "args": vars(args),
             },
             checkpoint_path,
@@ -449,7 +467,6 @@ for epoch in range(start_epoch, EPOCHS + 1):
                 "scheduler": scheduler.state_dict(),
                 "loss": best_loss,
                 "use_tacotron2": args.use_tacotron2,
-                "fine_tune_decoder": args.fine_tune_decoder,
                 "args": vars(args),
             },
             best_model_path,

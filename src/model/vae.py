@@ -136,7 +136,7 @@ class VAE(nn.Module):
 
     def decode_with_tacotron2(self, z, text):
         """
-        Use Tacotron2's decoder directly to generate mel spectrogram from text and latent speaker representation.
+        Use Tacotron2's standard forward pass with speaker conditioning.
         z: [B, latent_dim] - latent speaker representation
         text: list of strings
         """
@@ -155,105 +155,36 @@ class VAE(nn.Module):
             context = torch.enable_grad()
 
         with context:
-            # Encode text using Tacotron2's encoder
-            embedded_inputs = self.tacotron2.embedding(sequences).transpose(1, 2)
-            encoder_outputs = self.tacotron2.encoder(embedded_inputs, lengths)
-
-            # Initialize decoder states
-            mel_outputs = []
-            alignments = []
-
-            # Initialize decoder with proper input size for Tacotron2
-            # Tacotron2 decoder expects input of size decoder_rnn_input_size
-            decoder_rnn_input_size = self.tacotron2.decoder.decoder_rnn.input_size
-            decoder_input = torch.zeros(sequences.size(0), decoder_rnn_input_size).to(
-                self.device
+            # Use Tacotron2's standard forward pass
+            mel_outputs, mel_outputs_postnet, _, alignments = self.tacotron2.infer(
+                sequences, lengths
             )
 
-            # Initialize LSTM states properly for Tacotron2 decoder
-            # The decoder RNN expects hidden states in the format (h, c) where each is 2D
-            decoder_hidden = torch.zeros(
-                sequences.size(0), self.tacotron2.decoder.decoder_rnn_dim
-            ).to(self.device)
-            decoder_cell = torch.zeros(
-                sequences.size(0), self.tacotron2.decoder.decoder_rnn_dim
-            ).to(self.device)
-
-            # Project latent speaker representation to decoder dimension
+            # Apply speaker conditioning to the mel outputs
+            # Project latent speaker representation to mel dimension
             speaker_conditioning = self.speaker_projection(z)  # [B, hidden_dim]
-            # Project to decoder dimension if needed
-            if speaker_conditioning.size(-1) != self.tacotron2.decoder.decoder_rnn_dim:
-                spk_proj = nn.Linear(
-                    speaker_conditioning.size(-1),
-                    self.tacotron2.decoder.decoder_rnn_dim,
-                ).to(self.device)
-                speaker_conditioning = spk_proj(speaker_conditioning)
 
-            # Generate mel spectrograms step by step
-            for i in range(1000):  # Max decoder steps
-                # Apply attention
-                decoder_input = decoder_input.unsqueeze(1)
-                # Try to access attention through decoder, fallback to direct access
-                if hasattr(self.tacotron2.decoder, "attention"):
-                    attention_weights = self.tacotron2.decoder.attention(
-                        decoder_hidden.unsqueeze(1), encoder_outputs
-                    )
-                elif hasattr(self.tacotron2, "attention"):
-                    attention_weights = self.tacotron2.attention(
-                        decoder_hidden.unsqueeze(1), encoder_outputs
-                    )
-                else:
-                    # Fallback: use simple attention or skip attention
-                    attention_weights = torch.softmax(
-                        torch.randn(sequences.size(0), 1, encoder_outputs.size(1)).to(
-                            self.device
-                        ),
-                        dim=-1,
-                    )
-                attention_context = torch.bmm(attention_weights, encoder_outputs)
+            # Project to mel dimension for conditioning
+            if speaker_conditioning.size(-1) != self.n_mels:
+                spk_to_mel = nn.Linear(speaker_conditioning.size(-1), self.n_mels).to(
+                    self.device
+                )
+                speaker_conditioning = spk_to_mel(speaker_conditioning)
 
-                # Prepare decoder input properly for Tacotron2
-                # The decoder expects mel input concatenated with attention context
-                mel_input = decoder_input[:, :, : self.n_mels]  # Extract mel part
-                decoder_input = torch.cat([mel_input, attention_context], dim=-1)
-                # Squeeze to remove the time dimension for LSTM input
-                decoder_input = decoder_input.squeeze(1)
-
-                # Run decoder RNN with speaker conditioning
-                decoder_output, (decoder_hidden, decoder_cell) = (
-                    self.tacotron2.decoder.decoder_rnn(
-                        decoder_input, (decoder_hidden, decoder_cell)
-                    )
+            # Add speaker conditioning to mel outputs
+            # Expand speaker conditioning to match mel output dimensions
+            if mel_outputs_postnet.dim() == 3:  # [B, n_mels, T]
+                speaker_conditioning = speaker_conditioning.unsqueeze(-1).expand(
+                    -1, -1, mel_outputs_postnet.size(-1)
+                )
+            else:  # [B, T, n_mels]
+                speaker_conditioning = speaker_conditioning.unsqueeze(1).expand(
+                    -1, mel_outputs_postnet.size(1), -1
                 )
 
-                # Add speaker conditioning to decoder output
-                decoder_output = decoder_output + speaker_conditioning.unsqueeze(1)
+            mel_outputs_conditioned = mel_outputs_postnet + speaker_conditioning
 
-                # Project to mel spectrogram
-                mel_output = self.tacotron2.decoder.linear_projection(decoder_output)
-                gate_output = self.tacotron2.decoder.gate_layer(decoder_output)
-
-                # Store mel output before postnet
-                mel_outputs.append(mel_output.squeeze(1))
-                alignments.append(attention_weights.squeeze(1))
-
-                # Check for stop token
-                stop_token = gate_output.squeeze(1).sigmoid()
-                if stop_token > 0.5:
-                    break
-
-                # Use predicted mel as next input
-                decoder_input = mel_output.squeeze(1)
-
-            # Stack all outputs
-            mel_outputs = torch.stack(mel_outputs, dim=1)  # [B, T, n_mels]
-            alignments = torch.stack(alignments, dim=1)  # [B, T, encoder_T]
-
-            # Apply postnet to the final mel spectrogram
-            mel_outputs = mel_outputs.transpose(1, 2)  # [B, n_mels, T]
-            mel_outputs = self.tacotron2.postnet(mel_outputs)
-
-        return mel_outputs
+        return mel_outputs_conditioned
 
     def enable_fine_tuning(self):
         """Enable fine-tuning of Tacotron2 decoder components."""
@@ -456,10 +387,10 @@ class VAE(nn.Module):
 
     def synthesize_with_decoder(self, text, z, max_decoder_steps=1000):
         """
-        Synthesize speech using Tacotron2's decoder directly with speaker conditioning.
+        Synthesize speech using Tacotron2's standard inference with speaker conditioning.
         text: list of strings
         z: [B, latent_dim] - latent speaker representation
-        max_decoder_steps: maximum number of decoder steps
+        max_decoder_steps: maximum number of decoder steps (not used in this simplified version)
         """
         if not self.use_tacotron2:
             raise RuntimeError("Tacotron2 not available for synthesis")
@@ -476,105 +407,36 @@ class VAE(nn.Module):
             context = torch.enable_grad()
 
         with context:
-            # Encode text using Tacotron2's encoder
-            embedded_inputs = self.tacotron2.embedding(sequences).transpose(1, 2)
-            encoder_outputs = self.tacotron2.encoder(embedded_inputs, lengths)
-
-            # Initialize decoder states
-            mel_outputs = []
-            alignments = []
-
-            # Initialize decoder with proper input size for Tacotron2
-            # Tacotron2 decoder expects input of size decoder_rnn_input_size
-            decoder_rnn_input_size = self.tacotron2.decoder.decoder_rnn.input_size
-            decoder_input = torch.zeros(sequences.size(0), decoder_rnn_input_size).to(
-                self.device
+            # Use Tacotron2's standard inference
+            mel_outputs, mel_outputs_postnet, _, alignments = self.tacotron2.infer(
+                sequences, lengths
             )
 
-            # Initialize LSTM states properly for Tacotron2 decoder
-            # The decoder RNN expects hidden states in the format (h, c) where each is 2D
-            decoder_hidden = torch.zeros(
-                sequences.size(0), self.tacotron2.decoder.decoder_rnn_dim
-            ).to(self.device)
-            decoder_cell = torch.zeros(
-                sequences.size(0), self.tacotron2.decoder.decoder_rnn_dim
-            ).to(self.device)
-
-            # Project latent speaker representation to decoder dimension
+            # Apply speaker conditioning to the mel outputs
+            # Project latent speaker representation to mel dimension
             speaker_conditioning = self.speaker_projection(z)  # [B, hidden_dim]
-            # Project to decoder dimension if needed
-            if speaker_conditioning.size(-1) != self.tacotron2.decoder.decoder_rnn_dim:
-                spk_proj = nn.Linear(
-                    speaker_conditioning.size(-1),
-                    self.tacotron2.decoder.decoder_rnn_dim,
-                ).to(self.device)
-                speaker_conditioning = spk_proj(speaker_conditioning)
 
-            # Generate mel spectrograms step by step
-            for i in range(max_decoder_steps):
-                # Apply attention
-                decoder_input = decoder_input.unsqueeze(1)
-                # Try to access attention through decoder, fallback to direct access
-                if hasattr(self.tacotron2.decoder, "attention"):
-                    attention_weights = self.tacotron2.decoder.attention(
-                        decoder_hidden.unsqueeze(1), encoder_outputs
-                    )
-                elif hasattr(self.tacotron2, "attention"):
-                    attention_weights = self.tacotron2.attention(
-                        decoder_hidden.unsqueeze(1), encoder_outputs
-                    )
-                else:
-                    # Fallback: use simple attention or skip attention
-                    attention_weights = torch.softmax(
-                        torch.randn(sequences.size(0), 1, encoder_outputs.size(1)).to(
-                            self.device
-                        ),
-                        dim=-1,
-                    )
-                attention_context = torch.bmm(attention_weights, encoder_outputs)
+            # Project to mel dimension for conditioning
+            if speaker_conditioning.size(-1) != self.n_mels:
+                spk_to_mel = nn.Linear(speaker_conditioning.size(-1), self.n_mels).to(
+                    self.device
+                )
+                speaker_conditioning = spk_to_mel(speaker_conditioning)
 
-                # Prepare decoder input properly for Tacotron2
-                # The decoder expects mel input concatenated with attention context
-                mel_input = decoder_input[:, :, : self.n_mels]  # Extract mel part
-                decoder_input = torch.cat([mel_input, attention_context], dim=-1)
-                # Squeeze to remove the time dimension for LSTM input
-                decoder_input = decoder_input.squeeze(1)
-
-                # Run decoder RNN with speaker conditioning
-                decoder_output, (decoder_hidden, decoder_cell) = (
-                    self.tacotron2.decoder.decoder_rnn(
-                        decoder_input, (decoder_hidden, decoder_cell)
-                    )
+            # Add speaker conditioning to mel outputs
+            # Expand speaker conditioning to match mel output dimensions
+            if mel_outputs_postnet.dim() == 3:  # [B, n_mels, T]
+                speaker_conditioning = speaker_conditioning.unsqueeze(-1).expand(
+                    -1, -1, mel_outputs_postnet.size(-1)
+                )
+            else:  # [B, T, n_mels]
+                speaker_conditioning = speaker_conditioning.unsqueeze(1).expand(
+                    -1, mel_outputs_postnet.size(1), -1
                 )
 
-                # Add speaker conditioning to decoder output
-                decoder_output = decoder_output + speaker_conditioning.unsqueeze(1)
+            mel_outputs_conditioned = mel_outputs_postnet + speaker_conditioning
 
-                # Project to mel spectrogram
-                mel_output = self.tacotron2.decoder.linear_projection(decoder_output)
-                gate_output = self.tacotron2.decoder.gate_layer(decoder_output)
-
-                # Store mel output before postnet
-                mel_outputs.append(mel_output.squeeze(1))
-                alignments.append(attention_weights.squeeze(1))
-
-                # Check for stop token
-                stop_token = gate_output.squeeze(1).sigmoid()
-                if stop_token > 0.5:
-                    break
-
-                # Use predicted mel as next input
-                decoder_input = mel_output.squeeze(1)
-
-            # Stack all outputs
-            mel_outputs = torch.stack(mel_outputs, dim=1)  # [B, T, n_mels]
-            alignments = torch.stack(alignments, dim=1)  # [B, T, encoder_T]
-
-            # Apply postnet to the final mel spectrogram
-            mel_outputs = mel_outputs.transpose(1, 2)  # [B, n_mels, T]
-            mel_outputs = self.tacotron2.postnet(mel_outputs)
-
-        return mel_outputs, alignments
+        return mel_outputs_conditioned, alignments
 
     def synthesize(self, text, spk_emb, z=None):
         """
