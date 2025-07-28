@@ -177,15 +177,39 @@ def vae_loss(recon, target, mu, logvar, kl_weight):
     """Compute VAE loss with shape validation."""
     # Ensure inputs have the same shape
     if recon.shape != target.shape:
-        # Resize recon to match target if needed
-        if target.shape[-1] != recon.shape[-1]:
-            recon = F.interpolate(
-                recon, size=target.shape[-1], mode="linear", align_corners=False
+        # Check tensor dimensions and handle shape mismatches properly
+        if recon.dim() != target.dim():
+            print(
+                f"Warning: Dimension mismatch - recon: {recon.dim()}D, target: {target.dim()}D"
             )
-        if target.shape[1] != recon.shape[1]:
-            recon = F.interpolate(
-                recon, size=target.shape[1], mode="linear", align_corners=False
-            )
+            # If recon is 2D and target is 3D, try to reshape
+            if recon.dim() == 2 and target.dim() == 3:
+                # Assume recon is [B, features] and target is [B, n_mels, T]
+                # Try to reshape recon to match target
+                if recon.shape[0] == target.shape[0]:  # Same batch size
+                    # Reshape to [B, n_mels, T] by repeating or interpolating
+                    recon = recon.unsqueeze(1).expand(-1, target.shape[1], -1)
+                    if recon.shape[-1] != target.shape[-1]:
+                        recon = F.interpolate(
+                            recon,
+                            size=target.shape[-1],
+                            mode="linear",
+                            align_corners=False,
+                        )
+            else:
+                # For other cases, try to match the target shape
+                recon = recon.view_as(target)
+        else:
+            # Same number of dimensions, try to resize
+            if recon.dim() == 3:  # [B, n_mels, T] or [B, T, n_mels]
+                if target.shape[-1] != recon.shape[-1]:
+                    recon = F.interpolate(
+                        recon, size=target.shape[-1], mode="linear", align_corners=False
+                    )
+                if target.shape[1] != recon.shape[1]:
+                    recon = F.interpolate(
+                        recon, size=target.shape[1], mode="linear", align_corners=False
+                    )
 
     recon_loss = F.mse_loss(recon, target)  # Changed to MSE for better stability
     kld = -0.5 * torch.mean(1 + logvar - mu.pow(2) - logvar.exp())
@@ -249,23 +273,46 @@ def validate(vae, dataloader, device, speaker_embeddings, dataset, use_tacotron2
 
                 # Ensure mel_pad and recon have the same shape for loss calculation
                 if mel_pad.shape != recon.shape:
-                    # Resize recon to match mel_pad if needed
-                    if mel_pad.shape[-1] != recon.shape[-1]:
-                        # Interpolate recon to match mel_pad time dimension
-                        recon = F.interpolate(
-                            recon,
-                            size=mel_pad.shape[-1],
-                            mode="linear",
-                            align_corners=False,
+                    # Check tensor dimensions and handle shape mismatches properly
+                    if recon.dim() != mel_pad.dim():
+                        print(
+                            f"Warning: Dimension mismatch in validation - recon: {recon.dim()}D, mel_pad: {mel_pad.dim()}D"
                         )
-                    if mel_pad.shape[1] != recon.shape[1]:
-                        # Interpolate recon to match mel_pad mel dimension
-                        recon = F.interpolate(
-                            recon,
-                            size=mel_pad.shape[1],
-                            mode="linear",
-                            align_corners=False,
-                        )
+                        # If recon is 2D and mel_pad is 3D, try to reshape
+                        if recon.dim() == 2 and mel_pad.dim() == 3:
+                            # Assume recon is [B, features] and mel_pad is [B, n_mels, T]
+                            if recon.shape[0] == mel_pad.shape[0]:  # Same batch size
+                                # Reshape to [B, n_mels, T] by repeating or interpolating
+                                recon = recon.unsqueeze(1).expand(
+                                    -1, mel_pad.shape[1], -1
+                                )
+                                if recon.shape[-1] != mel_pad.shape[-1]:
+                                    recon = F.interpolate(
+                                        recon,
+                                        size=mel_pad.shape[-1],
+                                        mode="linear",
+                                        align_corners=False,
+                                    )
+                        else:
+                            # For other cases, try to match the mel_pad shape
+                            recon = recon.view_as(mel_pad)
+                    else:
+                        # Same number of dimensions, try to resize
+                        if recon.dim() == 3:  # [B, n_mels, T] or [B, T, n_mels]
+                            if mel_pad.shape[-1] != recon.shape[-1]:
+                                recon = F.interpolate(
+                                    recon,
+                                    size=mel_pad.shape[-1],
+                                    mode="linear",
+                                    align_corners=False,
+                                )
+                            if mel_pad.shape[1] != recon.shape[1]:
+                                recon = F.interpolate(
+                                    recon,
+                                    size=mel_pad.shape[1],
+                                    mode="linear",
+                                    align_corners=False,
+                                )
 
                 loss, recon_loss, kld = vae_loss(
                     recon, mel_pad, mu, logvar, kl_weight=1e-4
@@ -375,22 +422,48 @@ for epoch in range(start_epoch, EPOCHS + 1):
                     # Use fallback decoder only when Tacotron2 is disabled
                     recon, mu, logvar = vae(mel_pad, spk_emb_batch, None)
 
-            # Ensure mel_pad and recon have the same shape for loss calculation
-            if mel_pad.shape != recon.shape:
-                # Resize recon to match mel_pad if needed
-                if mel_pad.shape[-1] != recon.shape[-1]:
-                    # Interpolate recon to match mel_pad time dimension
-                    recon = F.interpolate(
-                        recon,
-                        size=mel_pad.shape[-1],
-                        mode="linear",
-                        align_corners=False,
-                    )
-                if mel_pad.shape[1] != recon.shape[1]:
-                    # Interpolate recon to match mel_pad mel dimension
-                    recon = F.interpolate(
-                        recon, size=mel_pad.shape[1], mode="linear", align_corners=False
-                    )
+                    # Ensure mel_pad and recon have the same shape for loss calculation
+                if mel_pad.shape != recon.shape:
+                    # Check tensor dimensions and handle shape mismatches properly
+                    if recon.dim() != mel_pad.dim():
+                        print(
+                            f"Warning: Dimension mismatch in training - recon: {recon.dim()}D, mel_pad: {mel_pad.dim()}D"
+                        )
+                        # If recon is 2D and mel_pad is 3D, try to reshape
+                        if recon.dim() == 2 and mel_pad.dim() == 3:
+                            # Assume recon is [B, features] and mel_pad is [B, n_mels, T]
+                            if recon.shape[0] == mel_pad.shape[0]:  # Same batch size
+                                # Reshape to [B, n_mels, T] by repeating or interpolating
+                                recon = recon.unsqueeze(1).expand(
+                                    -1, mel_pad.shape[1], -1
+                                )
+                                if recon.shape[-1] != mel_pad.shape[-1]:
+                                    recon = F.interpolate(
+                                        recon,
+                                        size=mel_pad.shape[-1],
+                                        mode="linear",
+                                        align_corners=False,
+                                    )
+                        else:
+                            # For other cases, try to match the mel_pad shape
+                            recon = recon.view_as(mel_pad)
+                    else:
+                        # Same number of dimensions, try to resize
+                        if recon.dim() == 3:  # [B, n_mels, T] or [B, T, n_mels]
+                            if mel_pad.shape[-1] != recon.shape[-1]:
+                                recon = F.interpolate(
+                                    recon,
+                                    size=mel_pad.shape[-1],
+                                    mode="linear",
+                                    align_corners=False,
+                                )
+                            if mel_pad.shape[1] != recon.shape[1]:
+                                recon = F.interpolate(
+                                    recon,
+                                    size=mel_pad.shape[1],
+                                    mode="linear",
+                                    align_corners=False,
+                                )
 
             loss, recon_loss, kld = vae_loss(recon, mel_pad, mu, logvar, kl_weight)
 
