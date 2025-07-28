@@ -207,6 +207,8 @@ class VAE(nn.Module):
 
                 # Combine decoder input with attention context
                 decoder_input = torch.cat([decoder_input, attention_context], dim=-1)
+                # Squeeze to remove the time dimension for LSTM input
+                decoder_input = decoder_input.squeeze(1)
 
                 # Run decoder RNN with speaker conditioning
                 decoder_output, (decoder_hidden, decoder_cell) = (
@@ -517,6 +519,8 @@ class VAE(nn.Module):
 
                 # Combine decoder input with attention context
                 decoder_input = torch.cat([decoder_input, attention_context], dim=-1)
+                # Squeeze to remove the time dimension for LSTM input
+                decoder_input = decoder_input.squeeze(1)
 
                 # Run decoder RNN with speaker conditioning
                 decoder_output, (decoder_hidden, decoder_cell) = (
@@ -569,8 +573,8 @@ class VAE(nn.Module):
 
         if z is None:
             # Use speaker embedding directly (no encoding needed)
-            # Project speaker embedding to latent space for consistency
-            z = self.speaker_to_latent(spk_emb)
+            # Use the direct speaker embedding synthesis method
+            return self.synthesize_with_speaker_embedding(text, spk_emb)
 
         # Use the new decoder-based synthesis
         return self.synthesize_with_decoder(text, z)
@@ -649,6 +653,8 @@ class VAE(nn.Module):
 
                 # Combine decoder input with attention context
                 decoder_input = torch.cat([decoder_input, attention_context], dim=-1)
+                # Squeeze to remove the time dimension for LSTM input
+                decoder_input = decoder_input.squeeze(1)
 
                 # Run decoder RNN with speaker conditioning
                 decoder_output, (decoder_hidden, decoder_cell) = (
