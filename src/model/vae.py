@@ -165,11 +165,14 @@ class VAE(nn.Module):
 
             # Initialize decoder
             decoder_input = torch.zeros(sequences.size(0), self.n_mels).to(self.device)
+
+            # Initialize LSTM states properly for Tacotron2 decoder
+            # The decoder RNN expects hidden states in the format (h, c) where each is 2D
             decoder_hidden = torch.zeros(
-                2, sequences.size(0), self.tacotron2.decoder.decoder_rnn_dim
+                sequences.size(0), self.tacotron2.decoder.decoder_rnn_dim
             ).to(self.device)
             decoder_cell = torch.zeros(
-                2, sequences.size(0), self.tacotron2.decoder.decoder_rnn_dim
+                sequences.size(0), self.tacotron2.decoder.decoder_rnn_dim
             ).to(self.device)
 
             # Project latent speaker representation to decoder dimension
@@ -189,11 +192,11 @@ class VAE(nn.Module):
                 # Try to access attention through decoder, fallback to direct access
                 if hasattr(self.tacotron2.decoder, "attention"):
                     attention_weights = self.tacotron2.decoder.attention(
-                        decoder_hidden[-1].unsqueeze(1), encoder_outputs
+                        decoder_hidden.unsqueeze(1), encoder_outputs
                     )
                 elif hasattr(self.tacotron2, "attention"):
                     attention_weights = self.tacotron2.attention(
-                        decoder_hidden[-1].unsqueeze(1), encoder_outputs
+                        decoder_hidden.unsqueeze(1), encoder_outputs
                     )
                 else:
                     # Fallback: use simple attention or skip attention
@@ -477,11 +480,14 @@ class VAE(nn.Module):
 
             # Initialize decoder
             decoder_input = torch.zeros(sequences.size(0), self.n_mels).to(self.device)
+
+            # Initialize LSTM states properly for Tacotron2 decoder
+            # The decoder RNN expects hidden states in the format (h, c) where each is 2D
             decoder_hidden = torch.zeros(
-                2, sequences.size(0), self.tacotron2.decoder.decoder_rnn_dim
+                sequences.size(0), self.tacotron2.decoder.decoder_rnn_dim
             ).to(self.device)
             decoder_cell = torch.zeros(
-                2, sequences.size(0), self.tacotron2.decoder.decoder_rnn_dim
+                sequences.size(0), self.tacotron2.decoder.decoder_rnn_dim
             ).to(self.device)
 
             # Project latent speaker representation to decoder dimension
@@ -501,11 +507,11 @@ class VAE(nn.Module):
                 # Try to access attention through decoder, fallback to direct access
                 if hasattr(self.tacotron2.decoder, "attention"):
                     attention_weights = self.tacotron2.decoder.attention(
-                        decoder_hidden[-1].unsqueeze(1), encoder_outputs
+                        decoder_hidden.unsqueeze(1), encoder_outputs
                     )
                 elif hasattr(self.tacotron2, "attention"):
                     attention_weights = self.tacotron2.attention(
-                        decoder_hidden[-1].unsqueeze(1), encoder_outputs
+                        decoder_hidden.unsqueeze(1), encoder_outputs
                     )
                 else:
                     # Fallback: use simple attention or skip attention
@@ -611,11 +617,14 @@ class VAE(nn.Module):
 
             # Initialize decoder
             decoder_input = torch.zeros(sequences.size(0), self.n_mels).to(self.device)
+
+            # Initialize LSTM states properly for Tacotron2 decoder
+            # The decoder RNN expects hidden states in the format (h, c) where each is 2D
             decoder_hidden = torch.zeros(
-                2, sequences.size(0), self.tacotron2.decoder.decoder_rnn_dim
+                sequences.size(0), self.tacotron2.decoder.decoder_rnn_dim
             ).to(self.device)
             decoder_cell = torch.zeros(
-                2, sequences.size(0), self.tacotron2.decoder.decoder_rnn_dim
+                sequences.size(0), self.tacotron2.decoder.decoder_rnn_dim
             ).to(self.device)
 
             # Project speaker embedding directly to decoder dimension
@@ -635,11 +644,11 @@ class VAE(nn.Module):
                 # Try to access attention through decoder, fallback to direct access
                 if hasattr(self.tacotron2.decoder, "attention"):
                     attention_weights = self.tacotron2.decoder.attention(
-                        decoder_hidden[-1].unsqueeze(1), encoder_outputs
+                        decoder_hidden.unsqueeze(1), encoder_outputs
                     )
                 elif hasattr(self.tacotron2, "attention"):
                     attention_weights = self.tacotron2.attention(
-                        decoder_hidden[-1].unsqueeze(1), encoder_outputs
+                        decoder_hidden.unsqueeze(1), encoder_outputs
                     )
                 else:
                     # Fallback: use simple attention or skip attention
