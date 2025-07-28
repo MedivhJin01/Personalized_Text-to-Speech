@@ -100,11 +100,10 @@ def load_trained_model(model_path, device):
 
     # Get model configuration from checkpoint
     use_tacotron2 = checkpoint.get("use_tacotron2", True)
-    fine_tune_decoder = checkpoint.get("fine_tune_decoder", True)
+    # fine_tune_decoder is no longer used, always set to False
+    fine_tune_decoder = False
 
-    print(
-        f"Loading model with use_tacotron2={use_tacotron2}, fine_tune_decoder={fine_tune_decoder}"
-    )
+    print(f"Loading model with use_tacotron2={use_tacotron2}")
 
     # Initialize VAE with same parameters as training
     vae = VAE(
@@ -113,7 +112,7 @@ def load_trained_model(model_path, device):
         latent_dim=64,
         hidden_dim=256,
         use_tacotron2=use_tacotron2,
-        fine_tune_decoder=fine_tune_decoder,
+        fine_tune_decoder=fine_tune_decoder,  # Always False
         device=device,
     ).to(device)
 
@@ -155,9 +154,10 @@ def synthesize_speech(
     if speaker_embedding is None and latent_z is None:
         print("No speaker embedding or latent provided, using random embedding...")
         speaker_embedding = torch.randn(1, 256).to(device)
+
     with torch.no_grad():
         try:
-            # Synthesize mel spectrogram using the new decoder method
+            # Synthesize mel spectrogram using the simplified decoder method
             if latent_z is not None:
                 print("Using provided latent representation for synthesis...")
                 mel_output, alignments = vae.synthesize_with_decoder(text, latent_z)
@@ -252,7 +252,7 @@ def main():
     parser.add_argument(
         "--model_path",
         type=str,
-        default="src/model/check_points/vae_tacotron2_best.pt",
+        default="checkpoints/vae_tacotron2_best.pt",
         help="Path to trained model checkpoint",
     )
     parser.add_argument(
@@ -302,12 +302,7 @@ def main():
         default=None,
         help="Extract latent from mel spectrogram file and save it",
     )
-    parser.add_argument(
-        "--max_decoder_steps",
-        type=int,
-        default=1000,
-        help="Maximum number of decoder steps for synthesis",
-    )
+
     parser.add_argument(
         "--save_intermediate",
         action="store_true",
@@ -339,6 +334,7 @@ def main():
     if not os.path.exists(args.model_path):
         print(f"Model not found at {args.model_path}")
         print("Please train the model first or provide correct path.")
+        print("Expected model path: checkpoints/vae_tacotron2_best.pt")
         return
 
     # Load trained model
@@ -422,18 +418,16 @@ def main():
         # Synthesize speech
         print(f"Synthesizing text: '{args.text}'")
 
-        # Use custom synthesis function with max_decoder_steps
+        # Use simplified synthesis function (max_decoder_steps parameter is ignored)
         if latent_z is not None:
             print("Using provided latent representation for synthesis...")
-            mel_output, alignments = vae.synthesize_with_decoder(
-                [args.text], latent_z, max_decoder_steps=args.max_decoder_steps
-            )
+            mel_output, alignments = vae.synthesize_with_decoder([args.text], latent_z)
         else:
             print("Using speaker embedding for synthesis...")
             # Use direct speaker embedding synthesis (simpler approach)
             print("Using direct speaker embedding synthesis...")
             mel_output, alignments = vae.synthesize_with_speaker_embedding(
-                [args.text], speaker_embedding, max_decoder_steps=args.max_decoder_steps
+                [args.text], speaker_embedding
             )
 
         print(f"Generated mel spectrogram shape: {mel_output.shape}")
@@ -546,6 +540,7 @@ def main():
             if speaker_embedding is not None:
                 print(f"Speaker embedding shape: {speaker_embedding.shape}")
             print(f"Output saved to: {args.output_path}")
+            print(f"Model configuration: use_tacotron2=True, fine_tune_decoder=False")
 
 
 if __name__ == "__main__":
