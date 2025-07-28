@@ -391,6 +391,14 @@ def main():
         print("No speaker specified, using random speaker embedding...")
         speaker_embedding = torch.randn(1, 256).to(device)
 
+    # Import torch.hub outside the torch.no_grad() context to avoid shadowing
+    try:
+        import torch.hub
+
+        waveglow_available = True
+    except ImportError:
+        waveglow_available = False
+
     with torch.no_grad():
         # Handle latent extraction if requested
         if args.extract_latent and os.path.exists(args.extract_latent):
@@ -454,46 +462,70 @@ def main():
             print(f"Intermediate outputs saved: {mel_path}, {alignments_path}")
 
         # Convert to audio using WaveGlow (if available)
-        try:
-            import torch.hub
-
-            waveglow = torch.hub.load(
-                "NVIDIA/DeepLearningExamples:torchhub",
-                "nvidia_waveglow",
-                model_math="fp16",
-            )
-            waveglow = waveglow.remove_weightnorm(waveglow)
-            waveglow = waveglow.to(device)
-            waveglow.eval()
-
-            print("Converting mel spectrogram to audio using WaveGlow...")
-            audio = waveglow.infer(mel_output)
-            audio_numpy = audio[0].data.cpu().numpy()
-            rate = 22050
-
-            # Save audio
-            write(args.output_path, rate, audio_numpy)
-            print(f"Audio saved to: {args.output_path}")
-
-            # Save alignments for visualization
-            alignments_path = args.output_path.replace(".wav", "_alignments.npy")
-            np.save(alignments_path, alignments[0].cpu().numpy())
-            print(f"Alignments saved to: {alignments_path}")
-
-            # Create alignment visualization if requested
-            if args.visualize_alignments:
-                alignments_viz_path = args.output_path.replace(
-                    ".wav", "_alignments.png"
+        if waveglow_available:
+            try:
+                waveglow = torch.hub.load(
+                    "NVIDIA/DeepLearningExamples:torchhub",
+                    "nvidia_waveglow",
+                    model_math="fp16",
                 )
-                visualize_alignments(
-                    alignments[0].cpu().numpy(), args.text, alignments_viz_path
-                )
+                waveglow = waveglow.remove_weightnorm(waveglow)
+                waveglow = waveglow.to(device)
+                waveglow.eval()
 
-            print("Synthesis completed successfully!")
+                print("Converting mel spectrogram to audio using WaveGlow...")
+                audio = waveglow.infer(mel_output)
+                audio_numpy = audio[0].data.cpu().numpy()
+                rate = 22050
 
-        except Exception as e:
-            print(f"WaveGlow not available: {e}")
-            print("Saving mel spectrogram instead...")
+                # Save audio
+                write(args.output_path, rate, audio_numpy)
+                print(f"Audio saved to: {args.output_path}")
+
+                # Save alignments for visualization
+                alignments_path = args.output_path.replace(".wav", "_alignments.npy")
+                np.save(alignments_path, alignments[0].cpu().numpy())
+                print(f"Alignments saved to: {alignments_path}")
+
+                # Create alignment visualization if requested
+                if args.visualize_alignments:
+                    alignments_viz_path = args.output_path.replace(
+                        ".wav", "_alignments.png"
+                    )
+                    visualize_alignments(
+                        alignments[0].cpu().numpy(), args.text, alignments_viz_path
+                    )
+
+                print("Synthesis completed successfully!")
+
+            except Exception as e:
+                print(f"WaveGlow not available: {e}")
+                print("Saving mel spectrogram instead...")
+
+                # Save mel spectrogram
+                mel_np = mel_output[0].cpu().numpy()
+                mel_path = args.output_path.replace(".wav", "_mel.npy")
+                np.save(mel_path, mel_np)
+                print(f"Mel spectrogram saved to: {mel_path}")
+
+                # Save alignments
+                alignments_path = args.output_path.replace(".wav", "_alignments.npy")
+                np.save(alignments_path, alignments[0].cpu().numpy())
+                print(f"Alignments saved to: {alignments_path}")
+
+                # Create alignment visualization if requested
+                if args.visualize_alignments:
+                    alignments_viz_path = args.output_path.replace(
+                        ".wav", "_alignments.png"
+                    )
+                    visualize_alignments(
+                        alignments[0].cpu().numpy(), args.text, alignments_viz_path
+                    )
+
+                print("Synthesis completed (mel spectrogram only)!")
+
+        else:
+            print("WaveGlow not available, saving mel spectrogram instead...")
 
             # Save mel spectrogram
             mel_np = mel_output[0].cpu().numpy()
