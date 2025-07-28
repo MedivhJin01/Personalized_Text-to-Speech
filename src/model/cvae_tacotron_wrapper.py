@@ -150,7 +150,8 @@ class CVAETacotron2(nn.Module):
             idx = SPK_ID2I_lookup[spk_id] if isinstance(spk_id, int) else spk_id
             e_spk_raw = self.spk_emb[idx].unsqueeze(0).to(device)  # lookup
         else:
-            raise ValueError("Must provide spk_id or spk_dvec.")
+            print("Warning: No speaker embedding provided, using zero speaker embedding.")
+            e_spk_raw = torch.zeros(1, 256, device=device)
         e_spk = self.spk_proj(e_spk_raw)              # [1,128]
 
         # -------- 3. latent z ----------
@@ -193,4 +194,5 @@ def cvae_taco_loss(mel_post, mel_gt, gate_out, gate_tgt, mu, logvar, *, beta=1e-
     gate = F.binary_cross_entropy_with_logits(gate_out, gate_tgt)
     kl  = -0.5 * torch.mean(1 + logvar - mu.pow(2) - logvar.exp())
     return l1 + gate + beta * kl, {'l1': l1.item(), 'gate': gate.item(), 'kl': kl.item()}
+
 

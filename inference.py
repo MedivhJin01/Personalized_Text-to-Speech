@@ -50,7 +50,8 @@ def main():
             raise KeyError(f"speaker_id {args.speaker_id} not in lookup")
         spk_emb = torch.from_numpy(spk_lookup[args.speaker_id]).to(dev).unsqueeze(0)
     else:
-        raise ValueError("Must provide --speaker_id or --speaker_emb_path")
+        print("Warning: No speaker embedding provided, using zero speaker embedding.")
+        spk_emb = torch.zeros(1, 256, device=dev)
 
     # ---------- call infer ----------
     out = model.infer(args.text, spk_dvec=spk_emb.squeeze(0),
@@ -68,10 +69,13 @@ def main():
         audio = waveglow.infer(mel_in)[0].cpu().numpy()
 
     rate = 22050
-    write(args.out_wav, rate, audio)
+    # Normalize audio and convert to int16 before saving
+    audio = audio / np.max(np.abs(audio))
+    write(args.out_wav, rate, (audio * 32767).astype(np.int16))
     print("🎵 saved to", args.out_wav)
 
 
 if __name__ == "__main__":
     main()
-
+    
+    
