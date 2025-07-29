@@ -141,15 +141,13 @@ def setup_model_config(output_path, dataset_path, selected_speakers_path):
         phoneme_language="en-us",
         phoneme_cache_path=os.path.join(output_path, "phoneme_cache"),
         text_cleaner="phoneme_cleaners",
-        # Model architecture
-        encoder_in_features=512,
-        decoder_in_features=512,
-        decoder_output_dim=80,
-        r=1,  # reduction factor
+        # # Model architecture
+        # encoder_in_features=512,
+        # decoder_in_features=512,
+        # decoder_output_dim=80,
+        # r=1,  # reduction factor
         # Attention settings
-        attention_type="original",
-        location_attn=True,
-        attention_norm="sigmoid",
+        attention_type="dynamic_convolution",
         # Multi-speaker settings
         use_speaker_embedding=True,
         speaker_embedding_dim=128,
@@ -159,8 +157,15 @@ def setup_model_config(output_path, dataset_path, selected_speakers_path):
         capacitron_vae=capacitron_config,
         # Training settings
         mixed_precision=False,  # Disabled to avoid BFloat16 logging issues
-        grad_clip=5.0,
-        loss_masking=True,
+        loss_masking=False,
+        decoder_loss_alpha=1.0,
+        postnet_loss_alpha=1.0,
+        postnet_diff_spec_alpha=0.0,
+        decoder_diff_spec_alpha=0.0,
+        decoder_ssim_alpha=0.0,
+        postnet_ssim_alpha=0.0,
+        grad_clip=0.0,  # Important! We overwrite the standard grad_clip with capacitron_grad_clip
+        double_decoder_consistency=False,
         # Logging and checkpointing
         output_path=output_path,
         print_step=25,
