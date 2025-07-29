@@ -7,3 +7,20 @@ unidecode
 inflect
 librosa
 torch
+# TTS library for Capacitron training
+TTS>=0.22.0
+# Additional dependencies for TTS training
+trainer>=0.0.32
+tensorboard
+phonemizer
+pypinyin
+jieba
+nltk
+bangla
+jamo
+gruut[de,es,fr]>=2.2.3
+scipy
+matplotlib
+Pillow
+numba
+packaging

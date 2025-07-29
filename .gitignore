@@ -5,3 +5,7 @@ dataset/
 __pycache__/
 *.pt
 *.pth
+tts-env/
+venv/
+checkpoints/
+.python-version
