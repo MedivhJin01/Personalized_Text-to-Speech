@@ -9,3 +9,4 @@ tts-env/
 venv/
 checkpoints/
 .python-version
+wav48_silence_trimmed/
