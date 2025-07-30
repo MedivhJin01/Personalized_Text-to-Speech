@@ -37,9 +37,12 @@ pretrained_model_path, _, _ = model_manager.download_model(
 print(f"Using pretrained model from: {pretrained_model_path}")
 
 
-# Load speaker embeddings to get selected speakers
-speaker_embeddings = np.load(speaker_emb_path, allow_pickle=True).item()
-selected_speakers = list(speaker_embeddings.keys())
+# Load selected speakers from the same file used by vctk_formatter
+selected_speakers_path = os.path.join(
+    project_root, "src/speaker_embedding/selected_speakers.txt"
+)
+with open(selected_speakers_path, "r") as f:
+    selected_speakers = [line.strip() for line in f if line.strip()]
 num_speakers = len(selected_speakers)
 
 print(f"Fine-tuning Glow-TTS with {num_speakers} speakers: {selected_speakers}")
@@ -59,15 +62,6 @@ audio_config = BaseAudioConfig(
     resample=False,  # Set to False since we already have processed audio
     do_trim_silence=True,
     trim_db=23.0,
-    # Glow-TTS specific audio settings
-    fft_size=1024,
-    win_length=1024,
-    hop_length=256,
-    num_mels=80,
-    mel_fmin=0.0,
-    mel_fmax=11025,
-    ref_level_db=20,
-    preemphasis=0.0,
 )
 
 # Define Glow-TTS model config
@@ -89,7 +83,7 @@ config = GlowTTSConfig(
     mixed_precision=True,
     output_path=output_path,
     datasets=[dataset_config],
-    use_speaker_embedding=True,
+    use_speaker_embedding=False,  # Set to False when using d-vectors
     min_text_len=0,
     max_text_len=500,
     min_audio_len=0,
@@ -106,6 +100,11 @@ config = GlowTTSConfig(
         ]
     },
     scheduler_after_epoch=False,  # scheduler works per step, not per epoch
+    use_d_vector_file=True,
+    d_vector_file=os.path.join(
+        project_root, "src/speaker_embedding/speaker_emb_lookup.json"
+    ),
+    d_vector_dim=256,  # This should match the embedding dimension in the file
 )
 
 # INITIALIZE THE AUDIO PROCESSOR
@@ -140,7 +139,11 @@ print(f"Evaluation samples: {len(eval_samples)}")
 
 # init speaker manager for multi-speaker training
 # it maps speaker-id to speaker-name in the model and data-loader
-speaker_manager = SpeakerManager()
+speaker_manager = SpeakerManager(
+    d_vectors_file_path=os.path.join(
+        project_root, "src/speaker_embedding/speaker_emb_lookup.json"
+    )
+)
 speaker_manager.set_ids_from_data(
     train_samples + eval_samples, parse_key="speaker_name"
 )
