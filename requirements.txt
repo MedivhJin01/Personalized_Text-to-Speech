@@ -1,23 +1,39 @@
-requests
-tqdm
-numpy
-soundfile
-resemblyzer
-unidecode
-inflect
-librosa
-torch
-# TTS library for Capacitron training
-TTS>=0.22.0
-# Additional dependencies for TTS training
+# Core dependencies
+requests>=2.25.0
+tqdm>=4.60.0
+numpy>=1.21.0,<2.0.0
+soundfile>=0.10.0
+unidecode>=1.3.0
+inflect>=5.0.0
+librosa>=0.9.0
+scipy>=1.7.0
+matplotlib>=3.5.0
+Pillow>=8.0.0
+numba>=0.56.0
+packaging>=20.0
+
+# PyTorch and related
+torch>=1.12.0
+torchaudio>=0.12.0
+
+# TTS library - using version 0.16.0 for compatibility with pretrained models
+TTS==0.16.0
+
+# Speaker embedding dependencies
+resemblyzer>=0.1.1.dev0
+webrtcvad>=2.0.10
+
+# Training dependencies
 trainer>=0.0.32
-tensorboard
-phonemizer
-pypinyin
-jieba
-nltk
-bangla
-jamo
+tensorboard>=2.8.0
+
+# Text processing and phonemization
+phonemizer>=3.0.0
+pypinyin>=0.47.0
+jieba>=0.42.1
+nltk>=3.7
+bangla>=0.1.0
+jamo>=0.4.1
 gruut[de,es,fr]>=2.2.3
 scipy
 matplotlib
