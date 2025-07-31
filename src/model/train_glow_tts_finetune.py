@@ -26,7 +26,7 @@ def setup_paths():
     script_path = Path(__file__).parent.absolute()
     project_root = script_path.parent
     output_path = project_root / "outputs"
-    dataset_path = project_root / "data" / "VCTK"
+    dataset_path = project_root / ".." / "dataset" / "VCTK"
 
     # Create directories if they don't exist
     output_path.mkdir(parents=True, exist_ok=True)
