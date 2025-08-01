@@ -11,3 +11,4 @@ checkpoints/
 .python-version
 wav48_silence_trimmed/
 src/model/phoneme_cache/
+src/outputs/

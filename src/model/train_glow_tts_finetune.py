@@ -78,14 +78,14 @@ def create_config(
     # Define model config for fine-tuning
     config = GlowTTSConfig(
         # Training parameters - reduced for fine-tuning
-        batch_size=8,  # Reduced from 32 to 8 for more stable fine-tuning
+        batch_size=32,  # Reduced from 32 to 8 for more stable fine-tuning
         eval_batch_size=4,  # Reduced from 16 to 4
         num_loader_workers=4,  # Reduced for stability
         num_eval_loader_workers=4,
         precompute_num_workers=4,
         run_eval=True,
         test_delay_epochs=-1,
-        epochs=50,  # Reduced from 100 to 50 to prevent overfitting
+        epochs=100,  # Reduced from 100 to 50 to prevent overfitting
         # Learning rate for fine-tuning (much smaller than from scratch)
         lr=learning_rate,
         # Text processing
@@ -113,10 +113,10 @@ def create_config(
         lr_scheduler_params={
             "gradual_learning_rates": [
                 [0, 1e-3],
-                [100, 5e-4],
-                [200, 3e-4],
-                [300, 1e-4],
-                [400, 5e-5],
+                [1000, 1e-4],
+                [5000, 5e-5],
+                [10000, 1e-5],
+
             ]
         },
         scheduler_after_epoch=False,
@@ -136,14 +136,14 @@ def main():
     parser.add_argument(
         "--learning_rate",
         type=float,
-        default=0.00001,
+        default=0.0001,
         help="Learning rate for fine-tuning (default: 0.00001)",
     )
     parser.add_argument(
         "--epochs",
         type=int,
-        default=50,
-        help="Number of training epochs (default: 50)",
+        default=100,
+        help="Number of training epochs (default:100)",
     )
     parser.add_argument(
         "--batch_size",
@@ -256,7 +256,7 @@ def main():
         for sample in train_samples
         if sample["speaker_name"] in selected_speakers
     ]
-    eval_samples_filtered = [
+        _filtered = [
         sample for sample in eval_samples if sample["speaker_name"] in selected_speakers
     ]
 
