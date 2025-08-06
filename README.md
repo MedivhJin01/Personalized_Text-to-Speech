@@ -19,6 +19,7 @@
 
 ## Pretrained Download
 * The Trilingual (Chinese, Japanese, English) Pretrained Model.
+https://drive.google.com/drive/folders/1-eEYTB5Av9jNql0WGBlRoi-WH2J7bp5Y 
 
 Manually download from the google drive provided above. Required files are `G_0.pth`, `D_0.pth`, `finetune_speaker.json`.
 
@@ -56,9 +57,14 @@ It is better to have aduio quality >=2s, <=10s
    ```
 
 ## Training
-* Run `python finetune_speaker_v2.py -m ./OUTPUT_MODEL --max_epochs "{Epochs}" --drop_speaker_embed True`  
-   Do replace `{Epochs}` with your desired number of epochs(100+ recommend). 
-   You can also continue training on previous stored checkpoint, the model checkpoints for those generator and discriminator should under `./OUTPUT_MODEL/` dir.
-   To view training progress, open a new terminal and `cd` to the project root directory, run `tensorboard --logdir=./OUTPUT_MODEL`, then visit `localhost:6006` with your web browser.
+* Run `python finetune_speaker_v2.py -m ./OUTPUT_MODEL --max_epochs "{Epochs}" --drop_speaker_embed True` Do replace `{Epochs}` with your desired number of epochs(100+ recommend). 
+* You can also continue training on previous stored checkpoint, the model checkpoints for those generator and discriminator should under `./OUTPUT_MODEL/` dir.
+* To view training progress, open a new terminal and `cd` to the project root directory, run `tensorboard --logdir=./OUTPUT_MODEL`, then visit `localhost:6006` with your web browser.
 
 ## Inference
+* Simply run `python VC_inference.py --model_dir ./OUTPUT_MODEL/G_latest.pth --share True`, which automatically create TTS Gradio Interface contain all the customized characters voice option.
+
+## Fine-tune dataset
+* The dataset we use extract 10 speakers from the VCTK dataset, each speaker contains 50 audio files.
+
+* Dataset: https://drive.google.com/drive/folders/1kfsVXk9Vc9ehMqIpOYnUU8IY-9kT65dQ
