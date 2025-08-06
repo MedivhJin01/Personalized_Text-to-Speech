@@ -19,7 +19,7 @@
 
 ## Pretrained Download
 * The Trilingual (Chinese, Japanese, English) Pretrained Model.
-https://drive.google.com/file/d/1HJ83XO9CgY1B3Yqay518LUwpIjBGkjDk/view?usp=drive_link 
+https://drive.google.com/drive/folders/1jI1bCpVZ1S_LNlRIdY9rPM5grS2Nl08F?usp=drive_link
 
 Manually download from the google drive provided above. Required files are `G_0.pth`, `D_0.pth`, `finetune_speaker.json`.
 
@@ -67,4 +67,7 @@ It is better to have aduio quality >=2s, <=10s
 ## Fine-tune dataset
 * The dataset we use extract 10 speakers from the VCTK dataset, each speaker contains 50 audio files.
 
-* Dataset: https://drive.google.com/file/d/1HJ83XO9CgY1B3Yqay518LUwpIjBGkjDk/view?usp=drive_link 
+* Dataset: https://drive.google.com/drive/folders/1jI1bCpVZ1S_LNlRIdY9rPM5grS2Nl08F?usp=drive_link
+
+## Play around with our fine-tuned model
+TTS: [![Hugging Face Spaces](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue)](https://huggingface.co/spaces/Russ0sg/my_english_tts_app)
