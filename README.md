@@ -62,7 +62,7 @@ It is better to have aduio quality >=2s, <=10s
 * To view training progress, open a new terminal and `cd` to the project root directory, run `tensorboard --logdir=./OUTPUT_MODEL`, then visit `localhost:6006` with your web browser.
 
 ## Inference
-* Simply run `python VC_inference.py --model_dir ./OUTPUT_MODEL/G_latest.pth --share True`, which automatically create TTS Gradio Interface contain all the customized characters voice option.
+* Simply run `python VC_inference.py --model_dir ./OUTPUT_MODEL/G_latest.pth --share True`, which automatically create TTS Gradio Interface link contain all the customized characters voice option.
 
 ## Fine-tune dataset
 * The dataset we use extract 10 speakers from the VCTK dataset, each speaker contains 50 audio files.
