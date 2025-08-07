@@ -70,7 +70,7 @@ It is better to have aduio quality >=2s, <=10s
 * Dataset: https://drive.google.com/drive/folders/1jI1bCpVZ1S_LNlRIdY9rPM5grS2Nl08F?usp=drive_link
 
 ## Play around with our fine-tuned model
-VCTK 10 Speakers TTS: [![Hugging Face Spaces](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue)](https://huggingface.co/spaces/Russ0sg/my_english_tts_app)
+VCTK 10 Speakers TTS: [![Hugging Face Spaces](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-Spaces-blue)]([https://huggingface.co/spaces/Russ0sg/my_english_tts_app](https://huggingface.co/spaces/Russ0sg/my_english_tts_app))
 
 ## Presentation slide
 Presentation slide can be accessed through Canva [https://www.canva.com/design/DAGu86xQ3fs/aKR0OxxhOhZgFX9uAmEh9w/edit?utm_content=DAGu86xQ3fs&utm_campaign=designshare&utm_medium=link2&utm_source=sharebutton ](https://www.canva.com/design/DAGu86xQ3fs/aKR0OxxhOhZgFX9uAmEh9w/edit?utm_content=DAGu86xQ3fs&utm_campaign=designshare&utm_medium=link2&utm_source=sharebutton) 
