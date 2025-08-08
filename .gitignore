@@ -1,0 +1,7 @@
+/.venv
+/dataset
+/src/outputs/phoneme_cache
+/src/model/__pycache__
+/utils/__pycache__
+/utils/text/__pycache__
+.DS_Store
